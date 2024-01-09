@@ -1,9 +1,9 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { EdaManager } from "../eda-manager";
-import { Processor } from "./processor";
-import { WorkItem } from "./scheduler";
-import { Lambda } from "aws-sdk";
 import { ApplicationException } from "@nivinjoseph/n-exception";
+import { InvokeCommand, InvokeCommandOutput, Lambda } from "@aws-sdk/client-lambda";
+import { EdaManager } from "../eda-manager.js";
+import { Processor } from "./processor.js";
+import { WorkItem } from "./scheduler.js";
 
 
 export class AwsLambdaProxyProcessor extends Processor
@@ -14,11 +14,11 @@ export class AwsLambdaProxyProcessor extends Processor
     public constructor(manager: EdaManager)
     {
         super(manager);
-        
+
         given(manager, "manager").ensure(t => t.awsLambdaProxyEnabled, "AWS Lambda proxy not enabled");
-        
+
         this._lambda = new Lambda({
-            signatureVersion: "v4",
+            // signatureVersion: "v4",
             region: manager.awsLambdaDetails!.region,
             credentials: {
                 accessKeyId: manager.awsLambdaDetails!.credentials.accessKeyId,
@@ -32,7 +32,7 @@ export class AwsLambdaProxyProcessor extends Processor
     {
         const response = await this._invokeLambda(workItem);
 
-        const result = response.Payload ? JSON.parse(response.Payload as string) : null;
+        const result = response.Payload ? JSON.parse(response.Payload.transformToString()) : null;
 
         if (result != null && result.error)
             throw new ApplicationException("Error during invocation of AWS Lambda.", result.error);
@@ -45,33 +45,20 @@ export class AwsLambdaProxyProcessor extends Processor
             throw new ApplicationException(
                 `Error during invocation of AWS Lambda. Details => ${response.LogResult?.base64Decode() ?? "Check CloudWatch logs for details."}`);
     }
-    
-    private _invokeLambda(workItem: WorkItem): Promise<Lambda.InvocationResponse>
+
+    private _invokeLambda(workItem: WorkItem): Promise<InvokeCommandOutput>
     {
-        return new Promise<Lambda.InvocationResponse>((resolve, reject) =>
-        {
-            this._lambda.invoke({
-                FunctionName: this.manager.awsLambdaDetails!.funcName,
-                InvocationType: "RequestResponse",
-                LogType: "Tail",
-                ClientContext: JSON.stringify({
-                    consumerId: workItem.consumerId,
-                    topic: workItem.topic,
-                    partition: workItem.partition,
-                    eventName: workItem.eventName
-                }).base64Encode(),
-                Payload: JSON.stringify(workItem.event.serialize())
-            }, (err, data) =>
-            {
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-                if (err)
-                {
-                    reject(err);
-                    return;
-                }
-                
-                resolve(data);
-            });
-        });
+        return this._lambda.send(new InvokeCommand({
+            FunctionName: this.manager.awsLambdaDetails!.funcName,
+            InvocationType: "RequestResponse",
+            LogType: "Tail",
+            ClientContext: JSON.stringify({
+                consumerId: workItem.consumerId,
+                topic: workItem.topic,
+                partition: workItem.partition,
+                eventName: workItem.eventName
+            }).base64Encode(),
+            Payload: JSON.stringify(workItem.event.serialize())
+        }));
     }
 }

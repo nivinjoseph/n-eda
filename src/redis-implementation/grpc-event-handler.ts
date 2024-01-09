@@ -3,12 +3,12 @@ import { Exception } from "@nivinjoseph/n-exception";
 import { ServiceLocator } from "@nivinjoseph/n-ject";
 import { Logger } from "@nivinjoseph/n-log";
 import { Deserializer } from "@nivinjoseph/n-util";
-import { EdaEvent } from "../eda-event";
-import { EdaEventHandler } from "../eda-event-handler";
-import { EdaManager } from "../eda-manager";
-import { GrpcModel } from "../grpc-details";
-import { ObserverEdaEventHandler } from "../observer-eda-event-handler";
-import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event";
+import { EdaEvent } from "../eda-event.js";
+import { EdaEventHandler } from "../eda-event-handler.js";
+import { EdaManager } from "../eda-manager.js";
+import { GrpcModel } from "../grpc-details.js";
+import { ObserverEdaEventHandler } from "../observer-eda-event-handler.js";
+import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 
 
 export class GrpcEventHandler
@@ -101,10 +101,10 @@ export class GrpcEventHandler
         {
             await handler.handle(event, (data.event as NedaDistributedObserverNotifyEvent).observerId);
         }
-        catch (error)
+        catch (error: any)
         {
             await this._logger!.logWarning(`Error in GRPC event handler while handling event of type '${data.eventName}' with data ${JSON.stringify(data.event.serialize())}.`);
-            await this._logger!.logError(error as Exception);
+            await this._logger!.logError(error);
             throw error;
         }
         finally

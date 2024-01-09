@@ -1,7 +1,7 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { EdaManager } from "../eda-manager";
-import { Processor } from "./processor";
-import { WorkItem } from "./scheduler";
+import { EdaManager } from "../eda-manager.js";
+import { Processor } from "./processor.js";
+import { WorkItem } from "./scheduler.js";
 import { ApplicationException } from "@nivinjoseph/n-exception";
 import * as Axios from "axios";
 

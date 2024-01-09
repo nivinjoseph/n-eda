@@ -1,5 +1,5 @@
 import { Deferred, Disposable } from "@nivinjoseph/n-util";
-import { RoutedEvent } from "./broker";
+import { RoutedEvent } from "./broker.js";
 
 
 export interface Scheduler extends Disposable

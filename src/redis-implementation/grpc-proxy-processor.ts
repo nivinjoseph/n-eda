@@ -1,9 +1,9 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { ApplicationException } from "@nivinjoseph/n-exception";
-import { EdaManager } from "../eda-manager";
-import { Processor } from "./processor";
-import { WorkItem } from "./scheduler";
-import { GrpcClient, GrpcClientFactory } from "./grpc-client-factory";
+import { EdaManager } from "../eda-manager.js";
+import { Processor } from "./processor.js";
+import { WorkItem } from "./scheduler.js";
+import { GrpcClient, GrpcClientFactory } from "./grpc-client-factory.js";
 
 
 export class GrpcProxyProcessor extends Processor
@@ -16,7 +16,7 @@ export class GrpcProxyProcessor extends Processor
         super(manager);
 
         given(manager, "manager").ensure(t => t.grpcProxyEnabled, "GRPC proxy not enabled");
-        
+
         given(grpcClientFactory, "grpcClientFactory").ensureHasValue().ensureIsType(GrpcClientFactory);
         this._grpcClient = grpcClientFactory.create();
     }

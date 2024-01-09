@@ -1,21 +1,21 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { Container, Registry, ServiceLocator, ComponentInstaller } from "@nivinjoseph/n-ject";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
-import { EventBus } from "./event-bus";
-import { EventSubMgr } from "./event-sub-mgr";
-import { ClassHierarchy, Disposable } from "@nivinjoseph/n-util";
-import { EventRegistration } from "./event-registration";
-import { Topic } from "./topic";
-import { EdaEvent } from "./eda-event";
-import * as MurmurHash from "murmurhash3js";
-import { EdaEventHandler } from "./eda-event-handler";
-import { AwsLambdaEventHandler } from "./redis-implementation/aws-lambda-event-handler";
-import { LambdaDetails } from "./lambda-details";
-import { RpcDetails } from "./rpc-details";
-import { RpcEventHandler } from "./redis-implementation/rpc-event-handler";
-import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler";
-import { GrpcDetails } from "./grpc-details";
-import { ObserverEdaEventHandler } from "./observer-eda-event-handler";
+import { EventBus } from "./event-bus.js";
+import { EventSubMgr } from "./event-sub-mgr.js";
+import { ClassDefinition, Disposable } from "@nivinjoseph/n-util";
+import { EventRegistration } from "./event-registration.js";
+import { Topic } from "./topic.js";
+import { EdaEvent } from "./eda-event.js";
+import MurmurHash from "murmurhash3js";
+import { EdaEventHandler } from "./eda-event-handler.js";
+import { AwsLambdaEventHandler } from "./redis-implementation/aws-lambda-event-handler.js";
+import { LambdaDetails } from "./lambda-details.js";
+import { RpcDetails } from "./rpc-details.js";
+import { RpcEventHandler } from "./redis-implementation/rpc-event-handler.js";
+import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
+import { GrpcDetails } from "./grpc-details.js";
+import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
 // import { ConsumerTracer } from "./event-handler-tracer";
 
 // public
@@ -37,9 +37,9 @@ export class EdaManager implements Disposable
     private _consumerName = "UNNAMED";
     private _consumerGroupId: string | null = null;
     private _cleanKeys = false;
-    
+
     private _distributedObserverTopic: Topic | null = null;
-    
+
     // private _consumerTracer: ConsumerTracer | null = null;
 
     private _awsLambdaDetails: LambdaDetails | null = null;
@@ -49,7 +49,7 @@ export class EdaManager implements Disposable
     private _rpcDetails: RpcDetails | null = null;
     private _isRpcConsumer = false;
     private _rpcEventHandler: RpcEventHandler | null = null;
-    
+
     private _grpcDetails: GrpcDetails | null = null;
     private _isGrpcConsumer = false;
     private _grpcEventHandler: GrpcEventHandler | null = null;
@@ -72,7 +72,7 @@ export class EdaManager implements Disposable
     public get consumerName(): string { return this._consumerName; }
     public get consumerGroupId(): string | null { return this._consumerGroupId; }
     public get cleanKeys(): boolean { return this._cleanKeys; }
-    
+
     // public get consumerTracer(): ConsumerTracer | null { return this._consumerTracer; }
 
     public get awsLambdaDetails(): LambdaDetails | null { return this._awsLambdaDetails; }
@@ -82,7 +82,7 @@ export class EdaManager implements Disposable
     public get rpcDetails(): RpcDetails | null { return this._rpcDetails; }
     public get rpcProxyEnabled(): boolean { return this._rpcDetails != null; }
     public get isRpcConsumer(): boolean { return this._isRpcConsumer; }
-    
+
     public get grpcDetails(): GrpcDetails | null { return this._grpcDetails; }
     public get grpcProxyEnabled(): boolean { return this._grpcDetails != null; }
     public get isGrpcConsumer(): boolean { return this._isGrpcConsumer; }
@@ -169,7 +169,7 @@ export class EdaManager implements Disposable
         return this;
     }
 
-    public registerEventHandlers(...eventHandlerClasses: Array<ClassHierarchy<EdaEventHandler<any>> | ClassHierarchy<ObserverEdaEventHandler<any>>>): this
+    public registerEventHandlers(...eventHandlerClasses: Array<ClassDefinition<EdaEventHandler<EdaEvent> | ObserverEdaEventHandler<EdaEvent>>>): this
     {
         given(eventHandlerClasses, "eventHandlerClasses").ensureHasValue().ensureIsArray();
         given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
@@ -177,15 +177,15 @@ export class EdaManager implements Disposable
         for (const eventHandler of eventHandlerClasses)
         {
             const eventRegistration = new EventRegistration(eventHandler);
-            
+
             if (eventRegistration.isObservedEvent)
             {
                 // observable, observedEvent, observer, observedEventHandler
-                
+
                 // Need to enforce: that for one observable.observedEvent.observer combination, there is on only one handler
                 if (this._observerEventMap.has(eventRegistration.observationKey))
                     throw new ApplicationException(`Multiple observer event handlers detected for observer key '${eventRegistration.observationKey}'.`);
-                
+
                 this._observerEventMap.set(eventRegistration.observationKey, eventRegistration);
             }
             else
@@ -194,7 +194,7 @@ export class EdaManager implements Disposable
                 if (this._eventMap.has(eventRegistration.eventTypeName))
                     throw new ApplicationException(`Multiple event handlers detected for event '${eventRegistration.eventTypeName}'.`);
 
-                this._eventMap.set(eventRegistration.eventTypeName, eventRegistration);    
+                this._eventMap.set(eventRegistration.eventTypeName, eventRegistration);
             }
 
             // this enforces that you cannot have 2 handler classes with the same name
@@ -203,20 +203,20 @@ export class EdaManager implements Disposable
 
         return this;
     }
-    
+
     // public registerConsumerTracer(tracer: ConsumerTracer): this
     // {
     //     given(tracer, "tracer").ensureHasValue().ensureIsFunction();
     //     given(this, "this")
     //         .ensure(t => !t._isBootstrapped, "invoking method after bootstrap")
     //         .ensure(t => !t._consumerTracer, "consumer tracer already set");
-            
+
     //     this._consumerTracer = tracer;
-        
+
     //     return this;
     // }
 
-    public registerEventBus(eventBus: EventBus | ClassHierarchy<EventBus>): this
+    public registerEventBus(eventBus: EventBus | ClassDefinition<EventBus>): this
     {
         given(eventBus, "eventBus").ensureHasValue();
         given(this, "this")
@@ -233,7 +233,7 @@ export class EdaManager implements Disposable
         return this;
     }
 
-    public registerEventSubscriptionManager(eventSubMgr: EventSubMgr | ClassHierarchy<EventSubMgr>, consumerGroupId: string): this
+    public registerEventSubscriptionManager(eventSubMgr: EventSubMgr | ClassDefinition<EventSubMgr>, consumerGroupId: string): this
     {
         given(eventSubMgr, "eventSubMgr").ensureHasValue();
         given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
@@ -311,11 +311,11 @@ export class EdaManager implements Disposable
 
         return this;
     }
-    
+
     public proxyToGrpc(grpcDetails: GrpcDetails): this
     {
         given(grpcDetails, "grpcDetails").ensureHasValue().ensureIsObject();
-        
+
         given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
 
@@ -323,7 +323,7 @@ export class EdaManager implements Disposable
 
         return this;
     }
-    
+
     public actAsGrpcConsumer(handler: GrpcEventHandler): this
     {
         given(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(GrpcEventHandler);
@@ -336,19 +336,19 @@ export class EdaManager implements Disposable
 
         return this;
     }
-    
+
     public enableDistributedObserver(topic: Topic): this
     {
         given(topic, "topic").ensureHasValue().ensureIsType(Topic);
         given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
-        
+
         const name = topic.name.toLowerCase();
         if (this._topics.some(t => t.name.toLowerCase() === name))
             throw new ApplicationException(`Multiple topics with the name '${name}' detected when registering distributed observer topic.`);
 
         this._topics.push(topic);
         this._distributedObserverTopic = topic;
-        
+
         return this;
     }
 
@@ -369,7 +369,7 @@ export class EdaManager implements Disposable
                 "cannot be both event subscriber and rpc consumer")
             .ensure(t => !(t._isAwsLambdaConsumer && t._isRpcConsumer),
                 "cannot be both lambda consumer and rpc consumer");
-                
+
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (this._partitionKeyMapper == null)
             this._partitionKeyMapper = (edaEvent): string => edaEvent.partitionKey;
@@ -389,7 +389,7 @@ export class EdaManager implements Disposable
 
         if (this._isRpcConsumer)
             this._rpcEventHandler!.initialize(this);
-            
+
         if (this._isGrpcConsumer)
             this._grpcEventHandler!.initialize(this);
 
@@ -452,7 +452,6 @@ export class EdaManager implements Disposable
             else
                 this._disposePromise = this._container.dispose();
         }
-        
         return this._disposePromise!;
     }
 
