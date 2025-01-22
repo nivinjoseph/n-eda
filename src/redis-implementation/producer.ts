@@ -1,11 +1,11 @@
-import { Make } from "@nivinjoseph/n-util";
 import { given } from "@nivinjoseph/n-defensive";
+import { Make } from "@nivinjoseph/n-util";
 // import * as Redis from "redis";
-import Redis from "ioredis";
-import { EdaEvent } from "../eda-event";
-import { Logger } from "@nivinjoseph/n-log";
-import * as Zlib from "zlib";
 import { Exception } from "@nivinjoseph/n-exception";
+import { Logger } from "@nivinjoseph/n-log";
+import { Redis } from "ioredis";
+import Zlib from "zlib";
+import { EdaEvent } from "../eda-event.js";
 // import * as MessagePack from "msgpackr";
 // import * as Snappy from "snappy";
 import * as otelApi from "@opentelemetry/api";
@@ -98,11 +98,11 @@ export class Producer
             const writeIndex = await Make.retryWithExponentialBackoff(() => this._incrementPartitionWriteIndex(), 5)();
             await Make.retryWithExponentialBackoff(() => this._storeEvents(writeIndex, compressed), 5)();
         }
-        catch (error)
+        catch (error: any)
         {
             const message = `Error while storing ${events.length} events => Topic: ${this._topic}; Partition: ${this._partition};`;
             await this._logger.logWarning(message);
-            await this._logger.logError(error as Exception);
+            await this._logger.logError(error);
             spans.forEach(span =>
             {
                 span.recordException(error as Exception);

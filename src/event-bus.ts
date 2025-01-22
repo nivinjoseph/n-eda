@@ -1,6 +1,6 @@
-import { EdaEvent } from "./eda-event";
+import { EdaEvent } from "./eda-event.js";
 import { Disposable } from "@nivinjoseph/n-util";
-import { EdaManager } from "./eda-manager";
+import { EdaManager } from "./eda-manager.js";
 
 // public
 export interface EventBus extends Disposable

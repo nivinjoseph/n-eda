@@ -1,8 +1,8 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { Deferred } from "@nivinjoseph/n-util";
-import { RoutedEvent } from "./broker";
-import { Processor } from "./processor";
-import { Scheduler, WorkItem } from "./scheduler";
+import { RoutedEvent } from "./broker.js";
+import { Processor } from "./processor.js";
+import { Scheduler, WorkItem } from "./scheduler.js";
 
 /**
  * @deprecated Only used for baselining

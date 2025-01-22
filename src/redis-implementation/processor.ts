@@ -2,11 +2,11 @@ import { given } from "@nivinjoseph/n-defensive";
 import { ApplicationException, Exception, InvalidOperationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Logger } from "@nivinjoseph/n-log";
 import { Delay, DelayCanceller, Disposable, Observable, Observer } from "@nivinjoseph/n-util";
-import { EdaManager } from "../eda-manager";
+import { EdaManager } from "../eda-manager.js";
 // import { ConsumerTracer } from "../event-handler-tracer";
-import { WorkItem } from "./scheduler";
 import * as otelApi from "@opentelemetry/api";
 import * as semCon from "@opentelemetry/semantic-conventions";
+import { WorkItem } from "./scheduler.js";
 
 
 export abstract class Processor implements Disposable
@@ -154,7 +154,7 @@ export abstract class Processor implements Disposable
                         workItem.deferred.resolve();
                         return;
                     }
-                    catch (error)
+                    catch (error: any)
                     {
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                         if (this._isDisposed)
@@ -170,7 +170,7 @@ export abstract class Processor implements Disposable
                         // }
                         
                         await this.logger.logWarning(`Error in EventHandler while handling event of type '${workItem.eventName}' (ATTEMPT = ${numProcessAttempts}) with data ${JSON.stringify(workItem.event.serialize())}.`);
-                        await this.logger.logWarning(error as Exception);
+                        await this.logger.logWarning(error);
 
                         if (numProcessAttempts >= maxProcessAttempts)
                             throw error;
@@ -189,7 +189,7 @@ export abstract class Processor implements Disposable
                     }
                 }
             }
-            catch (error)
+            catch (error: any)
             {
                 span.recordException(error as Error);
                 span.addEvent(`Failed to process event of type '${workItem.eventName}'`, {
@@ -201,7 +201,7 @@ export abstract class Processor implements Disposable
                     message
                 });
                 await this._logger.logError(message);
-                await this._logger.logError(error as Exception);
+                await this._logger.logError(error);
                 workItem.deferred.reject(new ApplicationException(message, error as Exception));
             }
             finally

@@ -1,8 +1,8 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { Serializable, serialize } from "@nivinjoseph/n-util";
-import { EdaEvent } from "../eda-event";
+import { EdaEvent } from "../eda-event.js";
 
-
+@serialize
 export class NedaDistributedObserverNotifyEvent extends Serializable implements EdaEvent
 {
     private readonly _observerTypeName: string;

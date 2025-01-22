@@ -1,13 +1,14 @@
-import { EdaManager } from "../eda-manager";
-import { WorkItem } from "./scheduler";
-import * as Path from "path";
-import * as Grpc from "@grpc/grpc-js";
-import * as ProtoLoader from "@grpc/proto-loader";
-import { ConnectionOptions } from "tls";
+import Grpc from "@grpc/grpc-js";
+import ProtoLoader from "@grpc/proto-loader";
 import { given } from "@nivinjoseph/n-defensive";
-import { Disposable, Duration, Make, Uuid } from "@nivinjoseph/n-util";
-import { Logger } from "@nivinjoseph/n-log";
 import { ApplicationException } from "@nivinjoseph/n-exception";
+import { Logger } from "@nivinjoseph/n-log";
+import { Disposable, Duration, Make, Uuid } from "@nivinjoseph/n-util";
+import Path from "node:path";
+import { ConnectionOptions } from "tls";
+import { EdaManager } from "../eda-manager.js";
+import { WorkItem } from "./scheduler.js";
+import { fileURLToPath } from "node:url";
 
 
 export class GrpcClientFactory
@@ -39,10 +40,11 @@ export class GrpcClientFactory
             defaults: true,
             oneofs: true
         };
-
-        const basePath = __dirname.endsWith(`dist${Path.sep}redis-implementation`)
-            ? Path.resolve(__dirname, "..", "..", "src", "redis-implementation")
-            : __dirname;
+        
+        const dirname = Path.dirname(fileURLToPath(import.meta.url));
+        const basePath = dirname.endsWith(`dist${Path.sep}redis-implementation`)
+            ? Path.resolve(dirname, "..", "..", "src", "redis-implementation")
+            : dirname;
 
         const packageDef = ProtoLoader.loadSync(Path.join(basePath, "grpc-processor.proto"), options);
         this._serviceDef = Grpc.loadPackageDefinition(packageDef).grpcprocessor;
