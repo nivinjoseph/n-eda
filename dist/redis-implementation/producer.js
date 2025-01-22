@@ -1,89 +1,83 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Producer = void 0;
-const tslib_1 = require("tslib");
-const n_util_1 = require("@nivinjoseph/n-util");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const Zlib = require("zlib");
+import { given } from "@nivinjoseph/n-defensive";
+import { Make } from "@nivinjoseph/n-util";
+import Zlib from "zlib";
 // import * as MessagePack from "msgpackr";
 // import * as Snappy from "snappy";
-const otelApi = require("@opentelemetry/api");
-const semCon = require("@opentelemetry/semantic-conventions");
-class Producer {
-    constructor(key, client, logger, topic, ttlMinutes, partition) {
-        this._edaPrefix = "n-eda";
-        (0, n_defensive_1.given)(key, "key").ensureHasValue().ensureIsString();
-        this._key = key;
-        (0, n_defensive_1.given)(client, "client").ensureHasValue().ensureIsObject();
-        this._client = client;
-        (0, n_defensive_1.given)(logger, "logger").ensureHasValue().ensureIsObject();
-        this._logger = logger;
-        (0, n_defensive_1.given)(topic, "topic").ensureHasValue().ensureIsString();
-        this._topic = topic;
-        (0, n_defensive_1.given)(ttlMinutes, "ttlMinutes").ensureHasValue().ensureIsNumber();
-        this._ttlSeconds = ttlMinutes * 60;
-        (0, n_defensive_1.given)(partition, "partition").ensureHasValue().ensureIsNumber();
-        this._partition = partition;
-    }
+import * as otelApi from "@opentelemetry/api";
+import * as semCon from "@opentelemetry/semantic-conventions";
+export class Producer {
     get id() { return `{${this._edaPrefix}-${this._topic}-${this._partition}}`; }
     get writeIndexKey() { return `${this.id}-write-index`; }
-    produce(...events) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-            (0, n_defensive_1.given)(events, "events").ensureHasValue().ensureIsArray();
-            if (events.isEmpty)
-                return;
-            const serialized = new Array();
-            const spans = new Array();
-            const tracer = otelApi.trace.getTracer("n-eda");
-            events.forEach((event) => {
-                const activeSpan = otelApi.trace.getActiveSpan();
-                const span = tracer.startSpan(`event.${event.name} publish`, {
-                    kind: otelApi.SpanKind.PRODUCER,
-                    attributes: {
-                        [semCon.SemanticAttributes.MESSAGING_SYSTEM]: "n-eda",
-                        [semCon.SemanticAttributes.MESSAGING_OPERATION]: "send",
-                        [semCon.SemanticAttributes.MESSAGING_DESTINATION]: this._key,
-                        [semCon.SemanticAttributes.MESSAGING_DESTINATION_KIND]: "topic",
-                        [semCon.SemanticAttributes.MESSAGING_TEMP_DESTINATION]: false,
-                        [semCon.SemanticAttributes.MESSAGING_PROTOCOL]: "NEDA",
-                        [semCon.SemanticAttributes.MESSAGE_ID]: event.id,
-                        [semCon.SemanticAttributes.MESSAGING_CONVERSATION_ID]: event.partitionKey
-                    }
-                });
-                const traceData = {};
-                otelApi.propagation.inject(otelApi.trace.setSpan(otelApi.context.active(), span), traceData);
-                const serializedEvent = event.serialize();
-                serializedEvent["$traceData"] = traceData;
-                serialized.push(serializedEvent);
-                spans.push(span);
-                if (activeSpan)
-                    otelApi.trace.setSpan(otelApi.context.active(), activeSpan);
+    constructor(key, client, logger, topic, ttlMinutes, partition) {
+        this._edaPrefix = "n-eda";
+        given(key, "key").ensureHasValue().ensureIsString();
+        this._key = key;
+        given(client, "client").ensureHasValue().ensureIsObject();
+        this._client = client;
+        given(logger, "logger").ensureHasValue().ensureIsObject();
+        this._logger = logger;
+        given(topic, "topic").ensureHasValue().ensureIsString();
+        this._topic = topic;
+        given(ttlMinutes, "ttlMinutes").ensureHasValue().ensureIsNumber();
+        this._ttlSeconds = ttlMinutes * 60;
+        given(partition, "partition").ensureHasValue().ensureIsNumber();
+        this._partition = partition;
+    }
+    async produce(...events) {
+        given(events, "events").ensureHasValue().ensureIsArray();
+        if (events.isEmpty)
+            return;
+        const serialized = new Array();
+        const spans = new Array();
+        const tracer = otelApi.trace.getTracer("n-eda");
+        events.forEach((event) => {
+            const activeSpan = otelApi.trace.getActiveSpan();
+            const span = tracer.startSpan(`event.${event.name} publish`, {
+                kind: otelApi.SpanKind.PRODUCER,
+                attributes: {
+                    [semCon.SemanticAttributes.MESSAGING_SYSTEM]: "n-eda",
+                    [semCon.SemanticAttributes.MESSAGING_OPERATION]: "send",
+                    [semCon.SemanticAttributes.MESSAGING_DESTINATION]: this._key,
+                    [semCon.SemanticAttributes.MESSAGING_DESTINATION_KIND]: "topic",
+                    [semCon.SemanticAttributes.MESSAGING_TEMP_DESTINATION]: false,
+                    [semCon.SemanticAttributes.MESSAGING_PROTOCOL]: "NEDA",
+                    [semCon.SemanticAttributes.MESSAGE_ID]: event.id,
+                    [semCon.SemanticAttributes.MESSAGING_CONVERSATION_ID]: event.partitionKey
+                }
             });
-            const compressed = yield this._compressEvents(serialized);
-            try {
-                const writeIndex = yield n_util_1.Make.retryWithExponentialBackoff(() => this._incrementPartitionWriteIndex(), 5)();
-                yield n_util_1.Make.retryWithExponentialBackoff(() => this._storeEvents(writeIndex, compressed), 5)();
-            }
-            catch (error) {
-                const message = `Error while storing ${events.length} events => Topic: ${this._topic}; Partition: ${this._partition};`;
-                yield this._logger.logWarning(message);
-                yield this._logger.logError(error);
-                spans.forEach(span => {
-                    span.recordException(error);
-                    span.setStatus({
-                        code: otelApi.SpanStatusCode.ERROR,
-                        message
-                    });
-                });
-                throw error;
-            }
-            finally {
-                spans.forEach(span => span.end());
-            }
+            const traceData = {};
+            otelApi.propagation.inject(otelApi.trace.setSpan(otelApi.context.active(), span), traceData);
+            const serializedEvent = event.serialize();
+            serializedEvent["$traceData"] = traceData;
+            serialized.push(serializedEvent);
+            spans.push(span);
+            if (activeSpan)
+                otelApi.trace.setSpan(otelApi.context.active(), activeSpan);
         });
+        const compressed = await this._compressEvents(serialized);
+        try {
+            const writeIndex = await Make.retryWithExponentialBackoff(() => this._incrementPartitionWriteIndex(), 5)();
+            await Make.retryWithExponentialBackoff(() => this._storeEvents(writeIndex, compressed), 5)();
+        }
+        catch (error) {
+            const message = `Error while storing ${events.length} events => Topic: ${this._topic}; Partition: ${this._partition};`;
+            await this._logger.logWarning(message);
+            await this._logger.logError(error);
+            spans.forEach(span => {
+                span.recordException(error);
+                span.setStatus({
+                    code: otelApi.SpanStatusCode.ERROR,
+                    message
+                });
+            });
+            throw error;
+        }
+        finally {
+            spans.forEach(span => span.end());
+        }
     }
     _compressEvents(events) {
-        return n_util_1.Make.callbackToPromise(Zlib.deflateRaw)(Buffer.from(JSON.stringify(events), "utf8"));
+        return Make.callbackToPromise(Zlib.deflateRaw)(Buffer.from(JSON.stringify(events), "utf8"));
     }
     _incrementPartitionWriteIndex() {
         return new Promise((resolve, reject) => {
@@ -112,18 +106,15 @@ class Producer {
     //         }).catch(e => reject(e));
     //     });
     // }
-    _storeEvents(writeIndex, eventData) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-            const key = `${this.id}-${writeIndex}`;
-            yield this._client
-                .pipeline()
-                .setex(key, this._ttlSeconds, eventData)
-                .publish(`${this.id}-changed`, this.id)
-                .exec();
-        });
+    async _storeEvents(writeIndex, eventData) {
+        const key = `${this.id}-${writeIndex}`;
+        await this._client
+            .pipeline()
+            .setex(key, this._ttlSeconds, eventData)
+            .publish(`${this.id}-changed`, this.id)
+            .exec();
     }
 }
-exports.Producer = Producer;
 // export class Producer
 // {
 //     private readonly _edaPrefix = "n-eda";

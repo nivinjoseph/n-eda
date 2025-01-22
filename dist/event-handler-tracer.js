@@ -1,5 +1,5 @@
-"use strict";
 // // public
+export {};
 // export type EventInfo = {
 //     readonly topic: string;
 //     readonly partition: number;

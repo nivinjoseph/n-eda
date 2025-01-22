@@ -1,4 +1,4 @@
-import { Serializable } from "@nivinjoseph/n-util";
+import { ClassDefinition, Serializable } from "@nivinjoseph/n-util";
 export interface EdaEvent extends Serializable {
     get id(): string;
     get name(): string;
@@ -6,3 +6,4 @@ export interface EdaEvent extends Serializable {
     get refId(): string;
     get refType(): string;
 }
+export type EdaEventClass<TEvent extends EdaEvent> = ClassDefinition<TEvent>;

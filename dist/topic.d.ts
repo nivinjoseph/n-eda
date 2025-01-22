@@ -16,6 +16,17 @@ export declare class Topic {
     get flush(): boolean;
     constructor(name: string, ttlDuration: Duration, numPartitions: number, flush?: boolean);
     subscribe(): Topic;
-    configurePartitionAffinity(partitionAffinity: string): Topic;
+    /**
+     * @param partitionAffinity  this should be in the format `${lowerLimitPartitionNumber}-${upperLimitPartitionNumber}`
+     * These Partition numbers are INCLUSIVE and should be in the range [0, the number of partitions configured - 1]
+     */
+    configurePartitionAffinity(partitionAffinity: `${number}-${number}`): Topic;
     disable(): Topic;
+}
+export interface TopicPartitionMetrics {
+    lag: number;
+    writeIndex: number;
+    readIndex: number;
+    productionRate: number;
+    consumptionRate: number;
 }

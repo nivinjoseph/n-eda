@@ -1,7 +1,7 @@
 import { Disposable } from "@nivinjoseph/n-util";
-import Redis from "ioredis";
-import { EdaManager } from "../eda-manager";
-import { Broker } from "./broker";
+import { Redis } from "ioredis";
+import { EdaManager } from "../eda-manager.js";
+import { Broker } from "./broker.js";
 export declare class Consumer implements Disposable {
     private readonly _edaPrefix;
     private readonly _nedaClearTrackedKeysEventName;

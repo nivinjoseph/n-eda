@@ -1,9 +1,9 @@
-"use strict";
 // import { EventBus } from "../event-bus";
 // import { EdaEvent } from "../eda-event";
 // import { given } from "@nivinjoseph/n-defensive";
 // import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 // import { EdaManager } from "../eda-manager";
+export {};
 // // public
 // export class InMemoryEventBus implements EventBus
 // {

@@ -1,8 +1,8 @@
 import { Container } from "@nivinjoseph/n-ject";
 import { Logger } from "@nivinjoseph/n-log";
 import { ClassHierarchy } from "@nivinjoseph/n-util";
-import { ApplicationScript } from "./application-script";
-import { RpcEventHandler } from "./rpc-event-handler";
+import { ApplicationScript } from "./application-script.js";
+import { RpcEventHandler } from "./rpc-event-handler.js";
 export declare class RpcServer {
     private readonly _port;
     private readonly _host;

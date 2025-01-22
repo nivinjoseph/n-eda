@@ -1,53 +1,53 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RedisEventSubMgr = void 0;
-const tslib_1 = require("tslib");
-const eda_manager_1 = require("../eda-manager");
+import { __esDecorate, __runInitializers, __setFunctionName } from "tslib";
+import { EdaManager } from "../eda-manager.js";
 // import * as Redis from "redis";
-const ioredis_1 = require("ioredis");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const consumer_1 = require("./consumer");
-const n_util_1 = require("@nivinjoseph/n-util");
-const n_ject_1 = require("@nivinjoseph/n-ject");
-const n_exception_1 = require("@nivinjoseph/n-exception");
-const broker_1 = require("./broker");
-const default_processor_1 = require("./default-processor");
-const aws_lambda_proxy_processor_1 = require("./aws-lambda-proxy-processor");
-const rpc_proxy_processor_1 = require("./rpc-proxy-processor");
-const grpc_proxy_processor_1 = require("./grpc-proxy-processor");
-const grpc_client_factory_1 = require("./grpc-client-factory");
-const monitor_1 = require("./monitor");
+import { given } from "@nivinjoseph/n-defensive";
+import { ObjectDisposedException } from "@nivinjoseph/n-exception";
+import { inject } from "@nivinjoseph/n-ject";
+import { Delay } from "@nivinjoseph/n-util";
+import { AwsLambdaProxyProcessor } from "./aws-lambda-proxy-processor.js";
+import { Broker } from "./broker.js";
+import { Consumer } from "./consumer.js";
+import { DefaultProcessor } from "./default-processor.js";
+import { GrpcClientFactory } from "./grpc-client-factory.js";
+import { GrpcProxyProcessor } from "./grpc-proxy-processor.js";
+import { Monitor } from "./monitor.js";
+import { RpcProxyProcessor } from "./rpc-proxy-processor.js";
 // import { ConsumerProfiler } from "./consumer-profiler";
 // import { ProfilingConsumer } from "./profiling-consumer";
 // public
-let RedisEventSubMgr = class RedisEventSubMgr {
-    constructor(redisClient, logger) {
-        this._brokers = new Array();
-        this._monitor = null;
-        this._isDisposing = false;
-        this._isDisposed = false;
-        this._disposePromise = null;
-        this._manager = null;
-        this._isConsuming = false;
-        (0, n_defensive_1.given)(redisClient, "redisClient").ensureHasValue().ensureIsObject();
-        this._client = redisClient;
-        (0, n_defensive_1.given)(logger, "logger").ensureHasValue().ensureIsObject();
-        this._logger = logger;
-    }
-    initialize(manager) {
-        (0, n_defensive_1.given)(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(eda_manager_1.EdaManager);
-        if (this._isDisposed)
-            throw new n_exception_1.ObjectDisposedException(this);
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._manager, "already initialized");
-        this._manager = manager;
-        // if (this._manager.metricsEnabled)
-        //     ConsumerProfiler.initialize();
-    }
-    consume() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
+let RedisEventSubMgr = (() => {
+    let _classDecorators = [inject("EdaRedisClient", "Logger")];
+    let _classDescriptor;
+    let _classExtraInitializers = [];
+    let _classThis;
+    var RedisEventSubMgr = _classThis = class {
+        constructor(redisClient, logger) {
+            this._brokers = new Array();
+            this._monitor = null;
+            this._isDisposing = false;
+            this._isDisposed = false;
+            this._disposePromise = null;
+            this._manager = null;
+            this._isConsuming = false;
+            given(redisClient, "redisClient").ensureHasValue().ensureIsObject();
+            this._client = redisClient;
+            given(logger, "logger").ensureHasValue().ensureIsObject();
+            this._logger = logger;
+        }
+        initialize(manager) {
+            given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
             if (this._isDisposed)
-                throw new n_exception_1.ObjectDisposedException(this);
-            (0, n_defensive_1.given)(this, "this").ensure(t => !!t._manager, "not initialized");
+                throw new ObjectDisposedException(this);
+            given(this, "this").ensure(t => !t._manager, "already initialized");
+            this._manager = manager;
+            // if (this._manager.metricsEnabled)
+            //     ConsumerProfiler.initialize();
+        }
+        async consume() {
+            if (this._isDisposed)
+                throw new ObjectDisposedException(this);
+            given(this, "this").ensure(t => !!t._manager, "not initialized");
             if (!this._isConsuming) {
                 this._isConsuming = true;
                 const monitorConsumers = new Array();
@@ -61,64 +61,69 @@ let RedisEventSubMgr = class RedisEventSubMgr {
                             partitions.push(partition);
                     }
                     const consumers = partitions
-                        .map(partition => new consumer_1.Consumer(this._client, this._manager, topic.name, partition, topic.flush));
+                        .map(partition => new Consumer(this._client, this._manager, topic.name, partition, topic.flush));
                     let processors;
                     if (this._manager.awsLambdaProxyEnabled)
-                        processors = consumers.map(_ => new aws_lambda_proxy_processor_1.AwsLambdaProxyProcessor(this._manager));
+                        processors = consumers.map(_ => new AwsLambdaProxyProcessor(this._manager));
                     else if (this._manager.rpcProxyEnabled)
-                        processors = consumers.map(_ => new rpc_proxy_processor_1.RpcProxyProcessor(this._manager));
+                        processors = consumers.map(_ => new RpcProxyProcessor(this._manager));
                     else if (this._manager.grpcProxyEnabled) {
-                        const grpcClientFactory = new grpc_client_factory_1.GrpcClientFactory(this._manager);
-                        processors = consumers.map(_ => new grpc_proxy_processor_1.GrpcProxyProcessor(this._manager, grpcClientFactory));
+                        const grpcClientFactory = new GrpcClientFactory(this._manager);
+                        processors = consumers.map(_ => new GrpcProxyProcessor(this._manager, grpcClientFactory));
                     }
                     else
-                        processors = consumers.map(_ => new default_processor_1.DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
-                    const broker = new broker_1.Broker(consumers, processors);
+                        processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
+                    const broker = new Broker(topic, consumers, processors);
                     this._brokers.push(broker);
                     monitorConsumers.push(...consumers);
                     // const monitor = new Monitor(this._client, consumers, this._logger);
                     // this._monitors.push(monitor);
                 });
-                this._monitor = new monitor_1.Monitor(this._client, monitorConsumers, this._logger);
-                yield this._monitor.start();
+                this._monitor = new Monitor(this._client, this._brokers, monitorConsumers, this._logger);
+                await this._monitor.start();
                 this._brokers.forEach(t => t.initialize());
             }
             while (!this._isDisposed) {
-                yield n_util_1.Delay.seconds(5);
+                await Delay.seconds(5);
             }
-        });
-    }
-    dispose() {
-        if (!this._isDisposing) {
-            this._isDisposing = true;
-            console.warn("Disposing EventSubMgr");
-            this._disposePromise = Promise.all([
-                // ...this._monitors.map(t => t.dispose()),
-                this._monitor.dispose(),
-                ...this._brokers.map(t => t.dispose())
-            ])
-                .catch(e => console.error(e))
-                .finally(() => {
-                this._isDisposed = true;
-                console.warn("EventSubMgr disposed");
-            });
-            // if (this._manager.metricsEnabled)
-            // {
-            //     await Delay.seconds(3);
-            //     ConsumerProfiler.aggregate(this._manager.consumerName, this._consumers.map(t => (<ProfilingConsumer>t).profiler));
-            // }
         }
-        return this._disposePromise;
-    }
-    onEventReceived(scope, topic, event) {
-        (0, n_defensive_1.given)(scope, "scope").ensureHasValue().ensureIsObject();
-        (0, n_defensive_1.given)(topic, "topic").ensureHasValue().ensureIsString();
-        (0, n_defensive_1.given)(event, "event").ensureHasValue().ensureIsObject();
-    }
-};
-RedisEventSubMgr = tslib_1.__decorate([
-    (0, n_ject_1.inject)("EdaRedisClient", "Logger"),
-    tslib_1.__metadata("design:paramtypes", [ioredis_1.default, Object])
-], RedisEventSubMgr);
-exports.RedisEventSubMgr = RedisEventSubMgr;
+        dispose() {
+            if (!this._isDisposing) {
+                this._isDisposing = true;
+                console.warn("Disposing EventSubMgr");
+                this._disposePromise = Promise.all([
+                    // ...this._monitors.map(t => t.dispose()),
+                    this._monitor.dispose(),
+                    ...this._brokers.map(t => t.dispose())
+                ])
+                    .catch(e => console.error(e))
+                    .finally(() => {
+                    this._isDisposed = true;
+                    console.warn("EventSubMgr disposed");
+                });
+                // if (this._manager.metricsEnabled)
+                // {
+                //     await Delay.seconds(3);
+                //     ConsumerProfiler.aggregate(this._manager.consumerName, this._consumers.map(t => (<ProfilingConsumer>t).profiler));
+                // }
+            }
+            return this._disposePromise;
+        }
+        onEventReceived(scope, topic, event) {
+            given(scope, "scope").ensureHasValue().ensureIsObject();
+            given(topic, "topic").ensureHasValue().ensureIsString();
+            given(event, "event").ensureHasValue().ensureIsObject();
+        }
+    };
+    __setFunctionName(_classThis, "RedisEventSubMgr");
+    (() => {
+        const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
+        __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
+        RedisEventSubMgr = _classThis = _classDescriptor.value;
+        if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+        __runInitializers(_classThis, _classExtraInitializers);
+    })();
+    return RedisEventSubMgr = _classThis;
+})();
+export { RedisEventSubMgr };
 //# sourceMappingURL=redis-event-sub-mgr.js.map

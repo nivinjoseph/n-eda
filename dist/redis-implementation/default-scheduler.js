@@ -1,16 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.DefaultScheduler = void 0;
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const n_util_1 = require("@nivinjoseph/n-util");
+import { given } from "@nivinjoseph/n-defensive";
+import { Deferred } from "@nivinjoseph/n-util";
 /**
  * @deprecated Only used for baselining
  */
-class DefaultScheduler {
+export class DefaultScheduler {
     constructor(processors) {
         this._queues = new Map();
         this._processing = new Set();
-        (0, n_defensive_1.given)(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
+        given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._processors = processors;
         this._processors.forEach(t => {
             t.availability.subscribe(this._executeAvailableWork.bind(this));
@@ -18,7 +15,7 @@ class DefaultScheduler {
         });
     }
     scheduleWork(routedEvent) {
-        const deferred = new n_util_1.Deferred();
+        const deferred = new Deferred();
         const workItem = Object.assign(Object.assign({}, routedEvent), { deferred });
         if (this._queues.has(workItem.partitionKey))
             this._queues.get(workItem.partitionKey).queue.unshift(workItem);
@@ -86,5 +83,4 @@ class DefaultScheduler {
         return null;
     }
 }
-exports.DefaultScheduler = DefaultScheduler;
 //# sourceMappingURL=default-scheduler.js.map

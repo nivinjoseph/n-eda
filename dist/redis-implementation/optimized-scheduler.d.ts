@@ -1,6 +1,6 @@
-import { RoutedEvent } from "./broker";
-import { Processor } from "./processor";
-import { Scheduler } from "./scheduler";
+import { RoutedEvent } from "./broker.js";
+import { Processor } from "./processor.js";
+import { Scheduler } from "./scheduler.js";
 export declare class OptimizedScheduler implements Scheduler {
     private readonly _queues;
     private readonly _processing;

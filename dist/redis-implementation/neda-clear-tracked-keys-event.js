@@ -1,32 +1,43 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.NedaClearTrackedKeysEvent = void 0;
-const tslib_1 = require("tslib");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const n_util_1 = require("@nivinjoseph/n-util");
-class NedaClearTrackedKeysEvent extends n_util_1.Serializable {
-    constructor(data) {
-        super(data);
-        const { id } = data;
-        (0, n_defensive_1.given)(id, "id").ensureHasValue().ensureIsString();
-        this._id = id;
-    }
-    get id() { return this._id; }
-    get name() { return NedaClearTrackedKeysEvent.getTypeName(); }
-    get partitionKey() { return this.name; }
-    get refId() { return this.id; }
-    get refType() { return "neda"; }
-}
-tslib_1.__decorate([
-    n_util_1.serialize,
-    tslib_1.__metadata("design:type", String),
-    tslib_1.__metadata("design:paramtypes", [])
-], NedaClearTrackedKeysEvent.prototype, "id", null);
-tslib_1.__decorate([
-    n_util_1.serialize // has to be serialized for eda purposes
-    ,
-    tslib_1.__metadata("design:type", String),
-    tslib_1.__metadata("design:paramtypes", [])
-], NedaClearTrackedKeysEvent.prototype, "name", null);
-exports.NedaClearTrackedKeysEvent = NedaClearTrackedKeysEvent;
+import { __esDecorate, __runInitializers, __setFunctionName } from "tslib";
+import { given } from "@nivinjoseph/n-defensive";
+import { Serializable, serialize } from "@nivinjoseph/n-util";
+let NedaClearTrackedKeysEvent = (() => {
+    let _classDecorators = [serialize];
+    let _classDescriptor;
+    let _classExtraInitializers = [];
+    let _classThis;
+    let _classSuper = Serializable;
+    let _instanceExtraInitializers = [];
+    let _get_id_decorators;
+    let _get_name_decorators;
+    var NedaClearTrackedKeysEvent = _classThis = class extends _classSuper {
+        get id() { return this._id; }
+        get name() { return NedaClearTrackedKeysEvent.getTypeName(); }
+        get partitionKey() { return this.name; }
+        get refId() { return this.id; }
+        get refType() { return "neda"; }
+        constructor(data) {
+            super(data);
+            this._id = (__runInitializers(this, _instanceExtraInitializers), void 0);
+            const { id } = data;
+            given(id, "id").ensureHasValue().ensureIsString();
+            this._id = id;
+        }
+    };
+    __setFunctionName(_classThis, "NedaClearTrackedKeysEvent");
+    (() => {
+        var _a;
+        const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create((_a = _classSuper[Symbol.metadata]) !== null && _a !== void 0 ? _a : null) : void 0;
+        _get_id_decorators = [serialize];
+        _get_name_decorators = [serialize];
+        __esDecorate(_classThis, null, _get_id_decorators, { kind: "getter", name: "id", static: false, private: false, access: { has: obj => "id" in obj, get: obj => obj.id }, metadata: _metadata }, null, _instanceExtraInitializers);
+        __esDecorate(_classThis, null, _get_name_decorators, { kind: "getter", name: "name", static: false, private: false, access: { has: obj => "name" in obj, get: obj => obj.name }, metadata: _metadata }, null, _instanceExtraInitializers);
+        __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
+        NedaClearTrackedKeysEvent = _classThis = _classDescriptor.value;
+        if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+        __runInitializers(_classThis, _classExtraInitializers);
+    })();
+    return NedaClearTrackedKeysEvent = _classThis;
+})();
+export { NedaClearTrackedKeysEvent };
 //# sourceMappingURL=neda-clear-tracked-keys-event.js.map

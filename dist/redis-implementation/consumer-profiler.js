@@ -1,6 +1,6 @@
-"use strict";
 // import { given } from "@nivinjoseph/n-defensive";
 // import { ProfilerTrace, Profiler } from "@nivinjoseph/n-util";
+export {};
 // export class ConsumerProfiler
 // {
 //     private readonly _eventTraces = new Array<ProfilerTrace>();

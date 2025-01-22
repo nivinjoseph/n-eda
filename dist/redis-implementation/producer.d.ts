@@ -1,6 +1,6 @@
-import Redis from "ioredis";
-import { EdaEvent } from "../eda-event";
 import { Logger } from "@nivinjoseph/n-log";
+import { Redis } from "ioredis";
+import { EdaEvent } from "../eda-event.js";
 export declare class Producer {
     private readonly _edaPrefix;
     private readonly _key;

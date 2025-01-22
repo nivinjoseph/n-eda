@@ -1,29 +1,48 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.observer = exports.observerSymbol = exports.observable = exports.observableSymbol = exports.observedEvent = exports.observedEventSymbol = void 0;
-require("reflect-metadata");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-require("@nivinjoseph/n-ext");
-// import { ArgumentException } from "@nivinjoseph/n-exception";
-exports.observedEventSymbol = Symbol.for("@nivinjoseph/n-eda/observedEvent");
+import { given } from "@nivinjoseph/n-defensive";
+import "@nivinjoseph/n-ext";
+export const observedEventSymbol = Symbol.for("@nivinjoseph/n-eda/observedEvent");
 // public
-function observedEvent(eventType) {
-    (0, n_defensive_1.given)(eventType, "eventType").ensureHasValue().ensureIsFunction();
-    return (target) => Reflect.defineMetadata(exports.observedEventSymbol, eventType, target);
+export function observedEvent(eventType) {
+    given(eventType, "eventType").ensureHasValue().ensureIsFunction();
+    const decorator = function (target, context) {
+        given(context, "context")
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            .ensure(t => t.kind === "class", "observedEvent decorator should only be used on a class");
+        const className = context.name;
+        given(className, className).ensureHasValue().ensureIsString()
+            .ensure(_ => typeof target.prototype["handle"] === "function", `class '${className}' should implement 'ObserverEdaEventHandler' interface`);
+        context.metadata[observedEventSymbol] = eventType;
+    };
+    return decorator;
 }
-exports.observedEvent = observedEvent;
-exports.observableSymbol = Symbol.for("@nivinjoseph/n-eda/observable");
+export const observableSymbol = Symbol.for("@nivinjoseph/n-eda/observable");
 // public
-function observable(type) {
-    (0, n_defensive_1.given)(type, "type").ensureHasValue().ensureIsFunction();
-    return (target) => Reflect.defineMetadata(exports.observableSymbol, type, target);
+export function observable(type) {
+    given(type, "type").ensureHasValue().ensureIsFunction();
+    const decorator = function (target, context) {
+        given(context, "context")
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            .ensure(t => t.kind === "class", "observable decorator should only be used on a class");
+        const className = context.name;
+        given(className, className).ensureHasValue().ensureIsString()
+            .ensure(_ => typeof target.prototype["handle"] === "function", `class '${className}' should implement 'ObserverEdaEventHandler' interface`);
+        context.metadata[observableSymbol] = type;
+    };
+    return decorator;
 }
-exports.observable = observable;
-exports.observerSymbol = Symbol.for("@nivinjoseph/n-eda/observer");
+export const observerSymbol = Symbol.for("@nivinjoseph/n-eda/observer");
 // public
-function observer(type) {
-    (0, n_defensive_1.given)(type, "type").ensureHasValue().ensureIsFunction();
-    return (target) => Reflect.defineMetadata(exports.observerSymbol, type, target);
+export function observer(type) {
+    given(type, "type").ensureHasValue().ensureIsFunction();
+    const decorator = function (target, context) {
+        given(context, "context")
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            .ensure(t => t.kind === "class", "observer decorator should only be used on a class");
+        const className = context.name;
+        given(className, className).ensureHasValue().ensureIsString()
+            .ensure(_ => typeof target.prototype["handle"] === "function", `class '${className}' should implement 'ObserverEdaEventHandler' interface`);
+        context.metadata[observerSymbol] = type;
+    };
+    return decorator;
 }
-exports.observer = observer;
 //# sourceMappingURL=observed-event.js.map

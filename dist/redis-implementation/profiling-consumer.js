@@ -1,9 +1,9 @@
-"use strict";
 // import { ApplicationException } from "@nivinjoseph/n-exception";
 // import { Delay, Deserializer, Make } from "@nivinjoseph/n-util";
 // import { EventRegistration } from "../event-registration";
 // import { Consumer } from "./consumer";
 // import { ConsumerProfiler } from "./consumer-profiler";
+export {};
 // export class ProfilingConsumer extends Consumer
 // {
 //     private readonly _profiler = new ConsumerProfiler();

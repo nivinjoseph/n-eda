@@ -1,7 +1,7 @@
-import { EventBus, ObservableWatch } from "../event-bus";
-import { EdaManager } from "../eda-manager";
-import { EdaEvent } from "../eda-event";
-import Redis from "ioredis";
+import { EdaEvent } from "../eda-event.js";
+import { EdaManager } from "../eda-manager.js";
+import { EventBus, ObservableWatch } from "../event-bus.js";
+import { Redis } from "ioredis";
 export declare class RedisEventBus implements EventBus {
     private readonly _nedaClearTrackedKeysEventName;
     private readonly _client;

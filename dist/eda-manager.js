@@ -1,19 +1,37 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.EdaManager = void 0;
-const tslib_1 = require("tslib");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const n_ject_1 = require("@nivinjoseph/n-ject");
-const n_exception_1 = require("@nivinjoseph/n-exception");
-const event_registration_1 = require("./event-registration");
-const topic_1 = require("./topic");
-const MurmurHash = require("murmurhash3js");
-const aws_lambda_event_handler_1 = require("./redis-implementation/aws-lambda-event-handler");
-const rpc_event_handler_1 = require("./redis-implementation/rpc-event-handler");
-const grpc_event_handler_1 = require("./redis-implementation/grpc-event-handler");
+import { given } from "@nivinjoseph/n-defensive";
+import { Container } from "@nivinjoseph/n-ject";
+import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
+import { EventRegistration } from "./event-registration.js";
+import { Topic } from "./topic.js";
+import MurmurHash from "murmurhash3js";
+import { AwsLambdaEventHandler } from "./redis-implementation/aws-lambda-event-handler.js";
+import { RpcEventHandler } from "./redis-implementation/rpc-event-handler.js";
+import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
 // import { ConsumerTracer } from "./event-handler-tracer";
 // public
-class EdaManager {
+export class EdaManager {
+    static get eventBusKey() { return "EventBus"; }
+    static get eventSubMgrKey() { return "EventSubMgr"; }
+    get containerRegistry() { return this._container; }
+    get serviceLocator() { return this._container; }
+    get topics() { return this._topics; }
+    get distributedObserverTopic() { return this._distributedObserverTopic; }
+    get eventMap() { return this._eventMap; }
+    get observerEventMap() { return this._observerEventMap; }
+    get consumerName() { return this._consumerName; }
+    get consumerGroupId() { return this._consumerGroupId; }
+    get cleanKeys() { return this._cleanKeys; }
+    // public get consumerTracer(): ConsumerTracer | null { return this._consumerTracer; }
+    get awsLambdaDetails() { return this._awsLambdaDetails; }
+    get awsLambdaProxyEnabled() { return this._awsLambdaDetails != null; }
+    get isAwsLambdaConsumer() { return this._isAwsLambdaConsumer; }
+    get rpcDetails() { return this._rpcDetails; }
+    get rpcProxyEnabled() { return this._rpcDetails != null; }
+    get isRpcConsumer() { return this._isRpcConsumer; }
+    get grpcDetails() { return this._grpcDetails; }
+    get grpcProxyEnabled() { return this._grpcDetails != null; }
+    get isGrpcConsumer() { return this._isGrpcConsumer; }
+    get partitionKeyMapper() { return this._partitionKeyMapper; }
     // public get metricsEnabled(): boolean { return this._metricsEnabled; }
     constructor(container) {
         // private readonly _wildKeys: Array<string>;
@@ -39,9 +57,9 @@ class EdaManager {
         this._isDisposed = false;
         this._disposePromise = null;
         this._isBootstrapped = false;
-        (0, n_defensive_1.given)(container, "container").ensureIsObject().ensureIsType(n_ject_1.Container);
+        given(container, "container").ensureIsObject().ensureIsType(Container);
         if (container == null) {
-            this._container = new n_ject_1.Container();
+            this._container = new Container();
             this._ownsContainer = true;
         }
         else {
@@ -54,47 +72,25 @@ class EdaManager {
         this._observerEventMap = new Map();
         // this._wildKeys = new Array<string>();
     }
-    static get eventBusKey() { return "EventBus"; }
-    static get eventSubMgrKey() { return "EventSubMgr"; }
-    get containerRegistry() { return this._container; }
-    get serviceLocator() { return this._container; }
-    get topics() { return this._topics; }
-    get distributedObserverTopic() { return this._distributedObserverTopic; }
-    get eventMap() { return this._eventMap; }
-    get observerEventMap() { return this._observerEventMap; }
-    get consumerName() { return this._consumerName; }
-    get consumerGroupId() { return this._consumerGroupId; }
-    get cleanKeys() { return this._cleanKeys; }
-    // public get consumerTracer(): ConsumerTracer | null { return this._consumerTracer; }
-    get awsLambdaDetails() { return this._awsLambdaDetails; }
-    get awsLambdaProxyEnabled() { return this._awsLambdaDetails != null; }
-    get isAwsLambdaConsumer() { return this._isAwsLambdaConsumer; }
-    get rpcDetails() { return this._rpcDetails; }
-    get rpcProxyEnabled() { return this._rpcDetails != null; }
-    get isRpcConsumer() { return this._isRpcConsumer; }
-    get grpcDetails() { return this._grpcDetails; }
-    get grpcProxyEnabled() { return this._grpcDetails != null; }
-    get isGrpcConsumer() { return this._isGrpcConsumer; }
-    get partitionKeyMapper() { return this._partitionKeyMapper; }
     useInstaller(installer) {
-        (0, n_defensive_1.given)(installer, "installer").ensureHasValue().ensureIsObject();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+        given(installer, "installer").ensureHasValue().ensureIsObject();
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._container.install(installer);
         return this;
     }
     useConsumerName(name) {
-        (0, n_defensive_1.given)(name, "name").ensureHasValue().ensureIsString();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+        given(name, "name").ensureHasValue().ensureIsString();
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._consumerName = name;
         return this;
     }
     registerTopics(...topics) {
-        (0, n_defensive_1.given)(topics, "topics").ensureHasValue().ensureIsArray();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+        given(topics, "topics").ensureHasValue().ensureIsArray();
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         for (const topic of topics) {
             const name = topic.name.toLowerCase();
             if (this._topics.some(t => t.name.toLowerCase() === name))
-                throw new n_exception_1.ApplicationException(`Multiple topics with the name '${name}' detected.`);
+                throw new ApplicationException(`Multiple topics with the name '${name}' detected.`);
             this._topics.push(topic);
         }
         return this;
@@ -106,29 +102,29 @@ class EdaManager {
     //     return this;
     // }
     usePartitionKeyMapper(func) {
-        (0, n_defensive_1.given)(func, "func").ensureHasValue().ensureIsFunction();
-        (0, n_defensive_1.given)(this, "this")
+        given(func, "func").ensureHasValue().ensureIsFunction();
+        given(this, "this")
             .ensure(t => !t._partitionKeyMapper, "partition key mapper already set")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._partitionKeyMapper = func;
         return this;
     }
     registerEventHandlers(...eventHandlerClasses) {
-        (0, n_defensive_1.given)(eventHandlerClasses, "eventHandlerClasses").ensureHasValue().ensureIsArray();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+        given(eventHandlerClasses, "eventHandlerClasses").ensureHasValue().ensureIsArray();
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         for (const eventHandler of eventHandlerClasses) {
-            const eventRegistration = new event_registration_1.EventRegistration(eventHandler);
+            const eventRegistration = new EventRegistration(eventHandler);
             if (eventRegistration.isObservedEvent) {
                 // observable, observedEvent, observer, observedEventHandler
                 // Need to enforce: that for one observable.observedEvent.observer combination, there is on only one handler
                 if (this._observerEventMap.has(eventRegistration.observationKey))
-                    throw new n_exception_1.ApplicationException(`Multiple observer event handlers detected for observer key '${eventRegistration.observationKey}'.`);
+                    throw new ApplicationException(`Multiple observer event handlers detected for observer key '${eventRegistration.observationKey}'.`);
                 this._observerEventMap.set(eventRegistration.observationKey, eventRegistration);
             }
             else {
                 // this enforces that you cannot have 2 handler classes for the same event
                 if (this._eventMap.has(eventRegistration.eventTypeName))
-                    throw new n_exception_1.ApplicationException(`Multiple event handlers detected for event '${eventRegistration.eventTypeName}'.`);
+                    throw new ApplicationException(`Multiple event handlers detected for event '${eventRegistration.eventTypeName}'.`);
                 this._eventMap.set(eventRegistration.eventTypeName, eventRegistration);
             }
             // this enforces that you cannot have 2 handler classes with the same name
@@ -146,8 +142,8 @@ class EdaManager {
     //     return this;
     // }
     registerEventBus(eventBus) {
-        (0, n_defensive_1.given)(eventBus, "eventBus").ensureHasValue();
-        (0, n_defensive_1.given)(this, "this")
+        given(eventBus, "eventBus").ensureHasValue();
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap")
             .ensure(t => !t._eventBusRegistered, "event bus already registered");
         if (typeof eventBus === "function")
@@ -158,9 +154,9 @@ class EdaManager {
         return this;
     }
     registerEventSubscriptionManager(eventSubMgr, consumerGroupId) {
-        (0, n_defensive_1.given)(eventSubMgr, "eventSubMgr").ensureHasValue();
-        (0, n_defensive_1.given)(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
-        (0, n_defensive_1.given)(this, "this")
+        given(eventSubMgr, "eventSubMgr").ensureHasValue();
+        given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap")
             .ensure(t => !t._eventSubMgrRegistered, "event subscription manager already registered");
         if (typeof eventSubMgr === "function")
@@ -172,70 +168,70 @@ class EdaManager {
         return this;
     }
     cleanUpKeys() {
-        (0, n_defensive_1.given)(this, "this")
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._cleanKeys = true;
         return this;
     }
     proxyToAwsLambda(lambdaDetails) {
-        (0, n_defensive_1.given)(lambdaDetails, "lambdaDetails").ensureHasValue().ensureIsObject();
-        (0, n_defensive_1.given)(this, "this")
+        given(lambdaDetails, "lambdaDetails").ensureHasValue().ensureIsObject();
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._awsLambdaDetails = lambdaDetails;
         return this;
     }
     actAsAwsLambdaConsumer(handler) {
-        (0, n_defensive_1.given)(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(aws_lambda_event_handler_1.AwsLambdaEventHandler);
-        (0, n_defensive_1.given)(this, "this")
+        given(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(AwsLambdaEventHandler);
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._awsLambdaEventHandler = handler;
         this._isAwsLambdaConsumer = true;
         return this;
     }
     proxyToRpc(rpcDetails) {
-        (0, n_defensive_1.given)(rpcDetails, "rpcDetails").ensureHasValue().ensureIsObject();
-        (0, n_defensive_1.given)(this, "this")
+        given(rpcDetails, "rpcDetails").ensureHasValue().ensureIsObject();
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._rpcDetails = rpcDetails;
         return this;
     }
     actAsRpcConsumer(handler) {
-        (0, n_defensive_1.given)(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(rpc_event_handler_1.RpcEventHandler);
-        (0, n_defensive_1.given)(this, "this")
+        given(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(RpcEventHandler);
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._rpcEventHandler = handler;
         this._isRpcConsumer = true;
         return this;
     }
     proxyToGrpc(grpcDetails) {
-        (0, n_defensive_1.given)(grpcDetails, "grpcDetails").ensureHasValue().ensureIsObject();
-        (0, n_defensive_1.given)(this, "this")
+        given(grpcDetails, "grpcDetails").ensureHasValue().ensureIsObject();
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._grpcDetails = grpcDetails;
         return this;
     }
     actAsGrpcConsumer(handler) {
-        (0, n_defensive_1.given)(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(grpc_event_handler_1.GrpcEventHandler);
-        (0, n_defensive_1.given)(this, "this")
+        given(handler, "handler").ensureHasValue().ensureIsObject().ensureIsInstanceOf(GrpcEventHandler);
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         this._grpcEventHandler = handler;
         this._isGrpcConsumer = true;
         return this;
     }
     enableDistributedObserver(topic) {
-        (0, n_defensive_1.given)(topic, "topic").ensureHasValue().ensureIsType(topic_1.Topic);
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+        given(topic, "topic").ensureHasValue().ensureIsType(Topic);
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
         const name = topic.name.toLowerCase();
         if (this._topics.some(t => t.name.toLowerCase() === name))
-            throw new n_exception_1.ApplicationException(`Multiple topics with the name '${name}' detected when registering distributed observer topic.`);
+            throw new ApplicationException(`Multiple topics with the name '${name}' detected when registering distributed observer topic.`);
         this._topics.push(topic);
         this._distributedObserverTopic = topic;
         return this;
     }
     bootstrap() {
         if (this._isDisposed)
-            throw new n_exception_1.ObjectDisposedException(this);
-        (0, n_defensive_1.given)(this, "this")
+            throw new ObjectDisposedException(this);
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "bootstrapping more than once")
             .ensure(t => t._topics.length > 0, "no topics registered")
             // .ensure(t => !!t._partitionKeyMapper, "no partition key mapper set")
@@ -260,24 +256,22 @@ class EdaManager {
             this._grpcEventHandler.initialize(this);
         this._isBootstrapped = true;
     }
-    beginConsumption() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-            if (this._isDisposed)
-                throw new n_exception_1.ObjectDisposedException(this);
-            (0, n_defensive_1.given)(this, "this")
-                .ensure(t => t._isBootstrapped, "not bootstrapped")
-                .ensure(t => t._eventSubMgrRegistered, "no EventSubMgr registered");
-            this._evtSubMgr = this.serviceLocator.resolve(EdaManager.eventSubMgrKey);
-            yield this._evtSubMgr.consume();
-        });
+    async beginConsumption() {
+        if (this._isDisposed)
+            throw new ObjectDisposedException(this);
+        given(this, "this")
+            .ensure(t => t._isBootstrapped, "not bootstrapped")
+            .ensure(t => t._eventSubMgrRegistered, "no EventSubMgr registered");
+        this._evtSubMgr = this.serviceLocator.resolve(EdaManager.eventSubMgrKey);
+        await this._evtSubMgr.consume();
     }
     mapToPartition(topic, event) {
-        (0, n_defensive_1.given)(topic, "topic").ensureHasValue().ensureIsString()
+        given(topic, "topic").ensureHasValue().ensureIsString()
             .ensure(t => this._topicMap.has(t));
-        (0, n_defensive_1.given)(event, "event").ensureHasValue().ensureIsObject();
+        given(event, "event").ensureHasValue().ensureIsObject();
         if (this._isDisposed)
-            throw new n_exception_1.ObjectDisposedException(this);
-        (0, n_defensive_1.given)(this, "this")
+            throw new ObjectDisposedException(this);
+        given(this, "this")
             .ensure(t => t._isBootstrapped, "not bootstrapped");
         const partitionKey = this._partitionKeyMapper(event).trim();
         return MurmurHash.x86.hash32(partitionKey) % this._topicMap.get(topic).numPartitions;
@@ -306,5 +300,4 @@ class EdaManager {
         return this._disposePromise;
     }
 }
-exports.EdaManager = EdaManager;
 //# sourceMappingURL=eda-manager.js.map

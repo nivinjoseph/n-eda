@@ -1,4 +1,3 @@
-"use strict";
 // import { EventSubMgr } from "../event-sub-mgr";
 // import { ServiceLocator } from "@nivinjoseph/n-ject";
 // import { given } from "@nivinjoseph/n-defensive";
@@ -10,6 +9,7 @@
 // import { ObjectDisposedException, ApplicationException } from "@nivinjoseph/n-exception";
 // import { EdaManager } from "../eda-manager";
 // import { EventRegistration } from "../event-registration";
+export {};
 // // public
 // export class InMemoryEventSubMgr implements EventSubMgr
 // {

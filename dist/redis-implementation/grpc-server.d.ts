@@ -1,8 +1,8 @@
-import { Logger } from "@nivinjoseph/n-log";
 import { Container } from "@nivinjoseph/n-ject";
+import { Logger } from "@nivinjoseph/n-log";
 import { ClassHierarchy } from "@nivinjoseph/n-util";
-import { GrpcEventHandler } from "./grpc-event-handler";
-import { ApplicationScript } from "./application-script";
+import { ApplicationScript } from "./application-script.js";
+import { GrpcEventHandler } from "./grpc-event-handler.js";
 export declare class GrpcServer {
     private readonly _port;
     private readonly _host;

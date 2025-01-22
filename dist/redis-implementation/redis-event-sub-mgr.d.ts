@@ -1,9 +1,9 @@
-import { EventSubMgr } from "../event-sub-mgr";
-import { EdaManager } from "../eda-manager";
-import Redis from "ioredis";
+import { EdaManager } from "../eda-manager.js";
+import { EventSubMgr } from "../event-sub-mgr.js";
 import { ServiceLocator } from "@nivinjoseph/n-ject";
-import { EdaEvent } from "../eda-event";
 import { Logger } from "@nivinjoseph/n-log";
+import { Redis } from "ioredis";
+import { EdaEvent } from "../eda-event.js";
 export declare class RedisEventSubMgr implements EventSubMgr {
     private readonly _client;
     private readonly _logger;

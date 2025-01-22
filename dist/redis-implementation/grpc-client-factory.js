@@ -1,21 +1,18 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GrpcClientFactory = void 0;
-const tslib_1 = require("tslib");
-const eda_manager_1 = require("../eda-manager");
-const Path = require("path");
-const Grpc = require("@grpc/grpc-js");
-const ProtoLoader = require("@grpc/proto-loader");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const n_util_1 = require("@nivinjoseph/n-util");
-const n_exception_1 = require("@nivinjoseph/n-exception");
-class GrpcClientFactory {
+import Grpc from "@grpc/grpc-js";
+import ProtoLoader from "@grpc/proto-loader";
+import { given } from "@nivinjoseph/n-defensive";
+import { ApplicationException } from "@nivinjoseph/n-exception";
+import { Duration, Make, Uuid } from "@nivinjoseph/n-util";
+import Path from "node:path";
+import { EdaManager } from "../eda-manager.js";
+import { fileURLToPath } from "node:url";
+export class GrpcClientFactory {
     constructor(manager) {
         var _a;
         this._clients = new Array();
         // private readonly _disposableClients = new Array<GrpcClientInternal>();
         this._roundRobin = 0;
-        (0, n_defensive_1.given)(manager, "manager").ensureHasValue().ensureIsInstanceOf(eda_manager_1.EdaManager)
+        given(manager, "manager").ensureHasValue().ensureIsInstanceOf(EdaManager)
             .ensure(t => t.grpcProxyEnabled, "GRPC proxy not enabled");
         this._manager = manager;
         this._logger = this._manager.serviceLocator.resolve("Logger");
@@ -27,9 +24,10 @@ class GrpcClientFactory {
             defaults: true,
             oneofs: true
         };
-        const basePath = __dirname.endsWith(`dist${Path.sep}redis-implementation`)
-            ? Path.resolve(__dirname, "..", "..", "src", "redis-implementation")
-            : __dirname;
+        const dirname = Path.dirname(fileURLToPath(import.meta.url));
+        const basePath = dirname.endsWith(`dist${Path.sep}redis-implementation`)
+            ? Path.resolve(dirname, "..", "..", "src", "redis-implementation")
+            : dirname;
         const packageDef = ProtoLoader.loadSync(Path.join(basePath, "grpc-processor.proto"), options);
         this._serviceDef = Grpc.loadPackageDefinition(packageDef).grpcprocessor;
         let isSecure = this._manager.grpcDetails.host !== "localhost";
@@ -53,7 +51,7 @@ class GrpcClientFactory {
         let connectionPoolSize = (_a = this._manager.grpcDetails.connectionPoolSize) !== null && _a !== void 0 ? _a : 50;
         if (connectionPoolSize <= 0)
             connectionPoolSize = 50;
-        n_util_1.Make.loop(() => this._clients.push(new GrpcClientFacade(new GrpcClientInternal(this._endpoint, this._serviceDef, this._creds, this._logger))), connectionPoolSize);
+        Make.loop(() => this._clients.push(new GrpcClientFacade(new GrpcClientInternal(this._endpoint, this._serviceDef, this._creds, this._logger))), connectionPoolSize);
         // setInterval(() =>
         // {
         //     this._clients.forEach(client =>
@@ -84,10 +82,14 @@ class GrpcClientFactory {
         return client;
     }
 }
-exports.GrpcClientFactory = GrpcClientFactory;
 class GrpcClientInternal {
+    get id() { return this._id; }
+    get isStale() { return (this._createdAt + Duration.fromMinutes(10).toMilliSeconds()) < Date.now(); }
+    get isOverused() { return this._numInvocations > 1000; }
+    get isActive() { return this._activeInvocations > 0; }
+    get isDisposed() { return this._isDisposed; }
     constructor(endpoint, serviceDef, creds, logger) {
-        this._id = n_util_1.Uuid.create();
+        this._id = Uuid.create();
         this._createdAt = Date.now();
         this._numInvocations = 0;
         this._activeInvocations = 0;
@@ -97,14 +99,9 @@ class GrpcClientInternal {
         this._client = new serviceDef.EdaService(endpoint, creds);
         this._logger = logger;
     }
-    get id() { return this._id; }
-    get isStale() { return (this._createdAt + n_util_1.Duration.fromMinutes(10).toMilliSeconds()) < Date.now(); }
-    get isOverused() { return this._numInvocations > 1000; }
-    get isActive() { return this._activeInvocations > 0; }
-    get isDisposed() { return this._isDisposed; }
     process(workItem) {
         if (this._isDisposing)
-            throw new n_exception_1.ApplicationException("Using disposed client");
+            throw new ApplicationException("Using disposed client");
         return new Promise((resolve, reject) => {
             this._numInvocations++;
             this._activeInvocations++;
@@ -128,30 +125,28 @@ class GrpcClientInternal {
             });
         });
     }
-    dispose() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-            if (this._isDisposing || this._isDisposed)
-                return;
-            try {
-                this._isDisposing = true;
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                this._client.close();
-            }
-            catch (error) {
-                yield this._logger.logWarning("Error while closing GRPC client");
-                yield this._logger.logError(error);
-            }
-            finally {
-                this._isDisposed = true;
-            }
-        });
+    async dispose() {
+        if (this._isDisposing || this._isDisposed)
+            return;
+        try {
+            this._isDisposing = true;
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            this._client.close();
+        }
+        catch (error) {
+            await this._logger.logWarning("Error while closing GRPC client");
+            await this._logger.logError(error);
+        }
+        finally {
+            this._isDisposed = true;
+        }
     }
 }
 class GrpcClientFacade {
+    get internal() { return this._clientInternal; }
     constructor(clientInternal) {
         this._clientInternal = clientInternal;
     }
-    get internal() { return this._clientInternal; }
     process(workItem) {
         return this._clientInternal.process(workItem);
     }

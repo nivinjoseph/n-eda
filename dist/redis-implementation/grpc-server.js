@@ -1,18 +1,15 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GrpcServer = void 0;
-const tslib_1 = require("tslib");
-const Path = require("path");
-const Grpc = require("@grpc/grpc-js");
-const ProtoLoader = require("@grpc/proto-loader");
-const n_defensive_1 = require("@nivinjoseph/n-defensive");
-const n_log_1 = require("@nivinjoseph/n-log");
-const n_ject_1 = require("@nivinjoseph/n-ject");
-const n_util_1 = require("@nivinjoseph/n-util");
-const n_config_1 = require("@nivinjoseph/n-config");
-const grpc_event_handler_1 = require("./grpc-event-handler");
-const n_svc_1 = require("@nivinjoseph/n-svc");
-class GrpcServer {
+import Grpc from "@grpc/grpc-js";
+import ProtoLoader from "@grpc/proto-loader";
+import { ConfigurationManager } from "@nivinjoseph/n-config";
+import { given } from "@nivinjoseph/n-defensive";
+import { Container } from "@nivinjoseph/n-ject";
+import { ConsoleLogger } from "@nivinjoseph/n-log";
+import { ShutdownManager } from "@nivinjoseph/n-svc";
+import { Delay } from "@nivinjoseph/n-util";
+import Path from "node:path";
+import { GrpcEventHandler } from "./grpc-event-handler.js";
+import { fileURLToPath } from "node:url";
+export class GrpcServer {
     constructor(port, host, container, logger) {
         this._startupScriptKey = "$startupScript";
         this._hasStartupScript = false;
@@ -26,52 +23,57 @@ class GrpcServer {
         };
         this._isBootstrapped = false;
         this._shutdownManager = null;
-        (0, n_defensive_1.given)(port, "port").ensureHasValue().ensureIsNumber();
+        given(port, "port").ensureHasValue().ensureIsNumber();
         this._port = port;
-        (0, n_defensive_1.given)(host, "host").ensureIsString();
+        given(host, "host").ensureIsString();
         this._host = host ? host.trim() : "0.0.0.0";
-        (0, n_defensive_1.given)(container, "container").ensureHasValue().ensureIsType(n_ject_1.Container);
+        given(container, "container").ensureHasValue().ensureIsType(Container);
         this._container = container;
-        (0, n_defensive_1.given)(logger, "logger").ensureIsObject();
-        this._logger = logger !== null && logger !== void 0 ? logger : new n_log_1.ConsoleLogger({
-            useJsonFormat: n_config_1.ConfigurationManager.getConfig("env") !== "dev"
+        given(logger, "logger").ensureIsObject();
+        this._logger = logger !== null && logger !== void 0 ? logger : new ConsoleLogger({
+            useJsonFormat: ConfigurationManager.getConfig("env") !== "dev"
         });
     }
     registerEventHandler(eventHandler) {
-        (0, n_defensive_1.given)(eventHandler, "eventHandler").ensureHasValue().ensureIsInstanceOf(grpc_event_handler_1.GrpcEventHandler);
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
+        given(eventHandler, "eventHandler").ensureHasValue().ensureIsInstanceOf(GrpcEventHandler);
+        given(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
         this._eventHandler = eventHandler;
         return this;
     }
     registerStartupScript(applicationScriptClass) {
-        (0, n_defensive_1.given)(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
+        given(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
+        given(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
         this._container.registerSingleton(this._startupScriptKey, applicationScriptClass);
         this._hasStartupScript = true;
         return this;
     }
     registerShutdownScript(applicationScriptClass) {
-        (0, n_defensive_1.given)(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
+        given(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
+        given(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
         this._container.registerSingleton(this._shutdownScriptKey, applicationScriptClass);
         this._hasShutdownScript = true;
         return this;
     }
     registerDisposeAction(disposeAction) {
-        (0, n_defensive_1.given)(disposeAction, "disposeAction").ensureHasValue().ensureIsFunction();
-        (0, n_defensive_1.given)(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
+        given(disposeAction, "disposeAction").ensureHasValue().ensureIsFunction();
+        given(this, "this").ensure(t => !t._isBootstrapped, "cannot invoke after bootstrap");
         this._disposeActions.push(() => {
             return new Promise((resolve) => {
                 try {
                     disposeAction()
                         .then(() => resolve())
                         .catch((e) => {
-                        this._logger.logError(e).finally(() => resolve());
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                        this._logger.logError(e)
+                            .finally(() => resolve());
                         // resolve();
                     });
                 }
                 catch (error) {
-                    this._logger.logError(error).finally(() => resolve());
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                    this._logger.logError(error)
+                        // .catch(t => console.error(t))
+                        .finally(() => resolve());
                     // resolve();
                 }
             });
@@ -79,38 +81,36 @@ class GrpcServer {
         return this;
     }
     bootstrap() {
-        (0, n_defensive_1.given)(this, "this")
+        given(this, "this")
             .ensure(t => !t._isBootstrapped, "already bootstrapped")
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             .ensure(t => t._eventHandler != null, "No event handler registered");
         this._configureContainer();
         this._configureStartup()
             .then(() => this._configureServer())
-            .then(() => tslib_1.__awaiter(this, void 0, void 0, function* () {
-            const appEnv = n_config_1.ConfigurationManager.getConfig("env");
-            const appName = n_config_1.ConfigurationManager.getConfig("package.name");
-            const appVersion = n_config_1.ConfigurationManager.getConfig("package.version");
-            const appDescription = n_config_1.ConfigurationManager.getConfig("package.description");
-            yield this._logger.logInfo(`ENV: ${appEnv}; NAME: ${appName}; VERSION: ${appVersion}; DESCRIPTION: ${appDescription}.`);
+            .then(async () => {
+            const appEnv = ConfigurationManager.getConfig("env");
+            const appName = ConfigurationManager.getConfig("package.name");
+            const appVersion = ConfigurationManager.getConfig("package.version");
+            const appDescription = ConfigurationManager.getConfig("package.description");
+            await this._logger.logInfo(`ENV: ${appEnv}; NAME: ${appName}; VERSION: ${appVersion}; DESCRIPTION: ${appDescription}.`);
             this._configureShutDown();
             this._isBootstrapped = true;
-            yield this._logger.logInfo("GRPC SERVER STARTED");
-        }))
-            .catch((e) => tslib_1.__awaiter(this, void 0, void 0, function* () {
-            yield this._logger.logWarning("GRPC SERVER STARTUP FAILED");
-            yield this._logger.logError(e);
+            await this._logger.logInfo("GRPC SERVER STARTED");
+        })
+            .catch(async (e) => {
+            await this._logger.logWarning("GRPC SERVER STARTUP FAILED");
+            await this._logger.logError(e);
             throw e;
-        }));
+        });
     }
     _configureContainer() {
         this.registerDisposeAction(() => this._container.dispose());
     }
-    _configureStartup() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-            yield this._logger.logInfo("GRPC SERVER STARTING...");
-            if (this._hasStartupScript)
-                yield this._container.resolve(this._startupScriptKey).run();
-        });
+    async _configureStartup() {
+        await this._logger.logInfo("GRPC SERVER STARTING...");
+        if (this._hasStartupScript)
+            await this._container.resolve(this._startupScriptKey).run();
     }
     _configureServer() {
         const options = {
@@ -120,9 +120,10 @@ class GrpcServer {
             defaults: true,
             oneofs: true
         };
-        const basePath = __dirname.endsWith(`dist${Path.sep}redis-implementation`)
-            ? Path.resolve(__dirname, "..", "..", "src", "redis-implementation")
-            : __dirname;
+        const dirname = Path.dirname(fileURLToPath(import.meta.url));
+        const basePath = dirname.endsWith(`dist${Path.sep}redis-implementation`)
+            ? Path.resolve(dirname, "..", "..", "src", "redis-implementation")
+            : dirname;
         const packageDef = ProtoLoader.loadSync(Path.join(basePath, "grpc-processor.proto"), options);
         const serviceDef = Grpc.loadPackageDefinition(packageDef).grpcprocessor;
         const server = new Grpc.Server();
@@ -192,76 +193,76 @@ class GrpcServer {
     _configureShutDown() {
         // if (ConfigurationManager.getConfig<string>("env") === "dev")
         //     return;
-        this.registerDisposeAction(() => tslib_1.__awaiter(this, void 0, void 0, function* () {
-            yield this._logger.logInfo("CLEANING UP. PLEASE WAIT...");
+        this.registerDisposeAction(async () => {
+            await this._logger.logInfo("CLEANING UP. PLEASE WAIT...");
             // return Delay.seconds(ConfigurationManager.getConfig<string>("env") === "dev" ? 2 : 20);
-        }));
-        this._shutdownManager = new n_svc_1.ShutdownManager(this._logger, [
-            () => tslib_1.__awaiter(this, void 0, void 0, function* () {
-                const seconds = n_config_1.ConfigurationManager.getConfig("env") === "dev" ? 2 : 15;
-                yield this._logger.logInfo(`BEGINNING WAIT (${seconds}S) FOR CONNECTION DRAIN...`);
+        });
+        this._shutdownManager = new ShutdownManager(this._logger, [
+            async () => {
+                const seconds = ConfigurationManager.getConfig("env") === "dev" ? 2 : 15;
+                await this._logger.logInfo(`BEGINNING WAIT (${seconds}S) FOR CONNECTION DRAIN...`);
                 this._changeStatus(ServingStatus.NOT_SERVING);
-                yield n_util_1.Delay.seconds(seconds);
-                yield this._logger.logInfo("CONNECTION DRAIN COMPLETE");
-            }),
+                await Delay.seconds(seconds);
+                await this._logger.logInfo("CONNECTION DRAIN COMPLETE");
+            },
             () => {
                 return new Promise((resolve, reject) => {
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
                     this._logger.logInfo("CLOSING GRPC SERVER...").finally(() => {
                         // eslint-disable-next-line @typescript-eslint/no-misused-promises
-                        this._server.tryShutdown((err) => tslib_1.__awaiter(this, void 0, void 0, function* () {
+                        this._server.tryShutdown(async (err) => {
                             if (err) {
-                                yield this._logger.logWarning("GRPC SERVER CLOSE ERRORED");
-                                yield this._logger.logError(err);
+                                await this._logger.logWarning("GRPC SERVER CLOSE ERRORED");
+                                await this._logger.logError(err);
                                 try {
-                                    yield this._logger.logInfo("FORCING GRPC SERVER SHUTDOWN...");
+                                    await this._logger.logInfo("FORCING GRPC SERVER SHUTDOWN...");
                                     this._server.forceShutdown();
-                                    yield this._logger.logInfo("FORCE SHUTDOWN OF GRPC SERVER COMPLETE");
+                                    await this._logger.logInfo("FORCE SHUTDOWN OF GRPC SERVER COMPLETE");
                                 }
                                 catch (error) {
-                                    yield this._logger.logWarning("FORCE SHUTDOWN OF GRPC SERVER ERRORED");
-                                    yield this._logger.logError(error);
+                                    await this._logger.logWarning("FORCE SHUTDOWN OF GRPC SERVER ERRORED");
+                                    await this._logger.logError(error);
                                     reject(error);
                                     return;
                                 }
                             }
-                            yield this._logger.logInfo("GRPC SERVER CLOSED");
+                            await this._logger.logInfo("GRPC SERVER CLOSED");
                             resolve();
-                        }));
+                        });
                     });
                 });
             },
-            () => tslib_1.__awaiter(this, void 0, void 0, function* () {
+            async () => {
                 if (this._hasShutdownScript) {
-                    yield this._logger.logInfo("SHUTDOWN SCRIPT EXECUTING...");
+                    await this._logger.logInfo("SHUTDOWN SCRIPT EXECUTING...");
                     try {
-                        yield this._container.resolve(this._shutdownScriptKey).run();
-                        yield this._logger.logInfo("SHUTDOWN SCRIPT COMPLETE");
+                        await this._container.resolve(this._shutdownScriptKey).run();
+                        await this._logger.logInfo("SHUTDOWN SCRIPT COMPLETE");
                     }
                     catch (error) {
-                        yield this._logger.logWarning("SHUTDOWN SCRIPT ERROR");
-                        yield this._logger.logWarning(error);
+                        await this._logger.logWarning("SHUTDOWN SCRIPT ERROR");
+                        await this._logger.logWarning(error);
                     }
                 }
-            }),
-            () => tslib_1.__awaiter(this, void 0, void 0, function* () {
-                yield this._logger.logInfo("DISPOSE ACTIONS EXECUTING...");
+            },
+            async () => {
+                await this._logger.logInfo("DISPOSE ACTIONS EXECUTING...");
                 try {
-                    yield Promise.allSettled(this._disposeActions.map(t => t()));
-                    yield this._logger.logInfo("DISPOSE ACTIONS COMPLETE");
+                    await Promise.allSettled(this._disposeActions.map(t => t()));
+                    await this._logger.logInfo("DISPOSE ACTIONS COMPLETE");
                 }
                 catch (error) {
-                    yield this._logger.logWarning("DISPOSE ACTIONS ERROR");
-                    yield this._logger.logError(error);
+                    await this._logger.logWarning("DISPOSE ACTIONS ERROR");
+                    await this._logger.logError(error);
                 }
-            })
+            }
         ]);
     }
     _changeStatus(status) {
-        (0, n_defensive_1.given)(status, "status").ensureHasValue().ensureIsEnum(ServingStatus);
+        given(status, "status").ensureHasValue().ensureIsEnum(ServingStatus);
         this._statusMap[""] = this._statusMap[this._serviceName] = status;
     }
 }
-exports.GrpcServer = GrpcServer;
 var ServingStatus;
 (function (ServingStatus) {
     ServingStatus["UNKNOWN"] = "UNKNOWN";

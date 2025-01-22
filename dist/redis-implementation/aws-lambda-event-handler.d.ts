@@ -1,6 +1,6 @@
 import { ServiceLocator } from "@nivinjoseph/n-ject";
-import { EdaEvent } from "../eda-event";
-import { EdaManager } from "../eda-manager";
+import { EdaEvent } from "../eda-event.js";
+import { EdaManager } from "../eda-manager.js";
 export declare class AwsLambdaEventHandler {
     private readonly _nedaDistributedObserverNotifyEventName;
     private _manager;
