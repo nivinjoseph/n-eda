@@ -1,6 +1,6 @@
 {
     "name": "@nivinjoseph/n-eda",
-    "version": "6.0.0",
+    "version": "6.0.1",
     "description": "Event Driven Architecture framework",
     "packageManager": "yarn@4.0.2",
     "type": "module",
