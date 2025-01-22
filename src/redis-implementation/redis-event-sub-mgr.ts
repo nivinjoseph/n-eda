@@ -102,7 +102,7 @@ export class RedisEventSubMgr implements EventSubMgr
                 else
                     processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
 
-                const broker = new Broker(consumers, processors);
+                const broker = new Broker(topic, consumers, processors);
                 this._brokers.push(broker);
 
                 monitorConsumers.push(...consumers);
@@ -110,7 +110,7 @@ export class RedisEventSubMgr implements EventSubMgr
                 // this._monitors.push(monitor);
             });
 
-            this._monitor = new Monitor(this._client, monitorConsumers, this._logger);
+            this._monitor = new Monitor(this._client, this._brokers, monitorConsumers, this._logger);
             await this._monitor.start();
 
             this._brokers.forEach(t => t.initialize());

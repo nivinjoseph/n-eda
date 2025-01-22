@@ -137,6 +137,8 @@ export class Consumer implements Disposable
                 // const readIndex = await this._fetchConsumerPartitionReadIndex();
 
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
+                
+                this._broker.report(this._partition, writeIndex, readIndex);
 
                 if (readIndex >= writeIndex)
                 {

@@ -9,19 +9,28 @@ import { Consumer } from "./consumer.js";
 import { OptimizedScheduler } from "./optimized-scheduler.js";
 import { Processor } from "./processor.js";
 import { Scheduler } from "./scheduler.js";
+import { Topic, TopicPartitionMetrics } from "../topic.js";
 
 
 export class Broker implements Disposable
 {
+    private readonly _topic: Topic;
     private readonly _consumers: ReadonlyArray<Consumer>;
     private readonly _processors: ReadonlyArray<Processor>;
     private readonly _scheduler: Scheduler;
-
+    private readonly _metricsTracker = new Map<number, TopicPartitionMetrics>;
     private _isDisposed = false;
+    
+    
+    public get topic(): Topic { return this._topic; }
+    public get metrics(): ReadonlyMap<number, TopicPartitionMetrics> { return this._metricsTracker; }
 
 
-    public constructor(consumers: ReadonlyArray<Consumer>, processors: ReadonlyArray<Processor>)
+    public constructor(topic: Topic, consumers: ReadonlyArray<Consumer>, processors: ReadonlyArray<Processor>)
     {
+        given(topic, "topic").ensureHasValue().ensureIsType(Topic);
+        this._topic = topic;
+        
         given(consumers, "consumers").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._consumers = consumers;
 
@@ -45,6 +54,26 @@ export class Broker implements Disposable
             return Promise.reject(new ObjectDisposedException("Broker"));
 
         return this._scheduler.scheduleWork(routedEvent);
+    }
+    
+    public report(partition: number, writeIndex: number, readIndex: number): void
+    {
+        const lag = writeIndex - readIndex;
+        
+        const last = this._metricsTracker.get(partition);
+        let lastWriteIndex = writeIndex;
+        let lastReadIndex = readIndex;
+        if (last != null)
+        {
+            lastWriteIndex = last.writeIndex;
+            lastReadIndex = last.readIndex;
+        }
+        
+        this._metricsTracker.set(partition, {
+            lag, writeIndex, readIndex,
+            productionRate: writeIndex - lastWriteIndex,
+            consumptionRate: readIndex - lastReadIndex
+        });
     }
 
     public async dispose(): Promise<void>
