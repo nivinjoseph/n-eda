@@ -1,5 +1,5 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { Delay, DelayCanceller, Deserializer, Disposable, Make } from "@nivinjoseph/n-util";
+import { Delay, DelayCanceller, Deserializer, Disposable, Duration, Make } from "@nivinjoseph/n-util";
 // import * as Redis from "redis";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Logger } from "@nivinjoseph/n-log";
@@ -42,6 +42,8 @@ export class Consumer implements Disposable
     private _consumePromise: Promise<void> | null = null;
     private _broker: Broker = null as any;
     private _delayCanceller: DelayCanceller | null = null;
+    
+    private _lastReportTime = 0;
 
     private get _writeIndexKey(): string { return `${this.id}-write-index`; }
     private get _readIndexKey(): string { return `${this._fullId}-read-index`; }
@@ -138,7 +140,12 @@ export class Consumer implements Disposable
 
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
                 
-                this._broker.report(this._partition, writeIndex, readIndex);
+                const now = Date.now();
+                if ((now - this._lastReportTime) > Duration.fromMinutes(1).toMilliSeconds())
+                {
+                    this._broker.report(this._partition, writeIndex, readIndex);
+                    this._lastReportTime = now;
+                }
 
                 if (readIndex >= writeIndex)
                 {
