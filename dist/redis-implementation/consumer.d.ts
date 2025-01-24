@@ -22,6 +22,7 @@ export declare class Consumer implements Disposable {
     private _consumePromise;
     private _broker;
     private _delayCanceller;
+    private _lastReportTime;
     private get _writeIndexKey();
     private get _readIndexKey();
     private get _trackedKeysKey();

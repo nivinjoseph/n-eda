@@ -1,5 +1,5 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { Delay, Deserializer, Make } from "@nivinjoseph/n-util";
+import { Delay, Deserializer, Duration, Make } from "@nivinjoseph/n-util";
 // import * as Redis from "redis";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import * as otelApi from "@opentelemetry/api";
@@ -31,6 +31,7 @@ export class Consumer {
         this._consumePromise = null;
         this._broker = null;
         this._delayCanceller = null;
+        this._lastReportTime = 0;
         given(client, "client").ensureHasValue().ensureIsObject();
         this._client = client;
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
@@ -84,7 +85,11 @@ export class Consumer {
                 // const writeIndex = await this._fetchPartitionWriteIndex();
                 // const readIndex = await this._fetchConsumerPartitionReadIndex();
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
-                this._broker.report(this._partition, writeIndex, readIndex);
+                const now = Date.now();
+                if ((now - this._lastReportTime) > Duration.fromMinutes(1).toMilliSeconds()) {
+                    this._broker.report(this._partition, writeIndex, readIndex);
+                    this._lastReportTime = now;
+                }
                 if (readIndex >= writeIndex) {
                     this._delayCanceller = {};
                     await Delay.milliseconds(Make.randomInt(2500, 5000), this._delayCanceller);
