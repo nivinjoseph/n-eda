@@ -8,8 +8,9 @@ export class Topic
     private readonly _name: string;
     private readonly _ttlMinutes: number;
     private readonly _numPartitions: number;
-    private readonly _flush: boolean;
-
+    
+    private _isForce: boolean = false;
+    private _isFlush: boolean = false;
     private _publishOnly = true;
     private _partitionAffinity: ReadonlyArray<number> | null = null;
     private _isDisabled = false;
@@ -21,10 +22,11 @@ export class Topic
     public get publishOnly(): boolean { return this._publishOnly; }
     public get partitionAffinity(): ReadonlyArray<number> | null { return this._partitionAffinity; }
     public get isDisabled(): boolean { return this._isDisabled; }
-    public get flush(): boolean { return this._flush; }
+    public get isForce(): boolean { return this._isForce; }
+    public get isFlush(): boolean { return this._isFlush; }
 
 
-    public constructor(name: string, ttlDuration: Duration, numPartitions: number, flush = false)
+    public constructor(name: string, ttlDuration: Duration, numPartitions: number)
     {
         given(name, "name").ensureHasValue().ensureIsString();
         this._name = name.trim();
@@ -34,9 +36,6 @@ export class Topic
 
         given(numPartitions, "numPartitions").ensureHasValue().ensureIsNumber().ensure(t => t > 0);
         this._numPartitions = numPartitions;
-
-        given(flush, "flush").ensureHasValue().ensureIsBoolean();
-        this._flush = flush;
     }
 
 
@@ -44,6 +43,20 @@ export class Topic
     {
         this._publishOnly = false;
 
+        return this;
+    }
+    
+    public forcePublish(): Topic
+    {
+        this._isForce = true;
+        
+        return this;
+    }
+    
+    public flushConsume(): Topic
+    {
+        this._isFlush = true;
+        
         return this;
     }
 
