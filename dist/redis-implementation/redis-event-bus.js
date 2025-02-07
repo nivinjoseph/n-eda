@@ -52,7 +52,8 @@ let RedisEventBus = (() => {
             given(this, "this")
                 .ensure(t => !!t._manager, "not initialized");
             given(topic, "topic").ensureHasValue().ensureIsString()
-                .ensure(t => this._manager.topics.some(u => u.name === t));
+                .ensure(t => this._manager.topics.some(u => u.name === t), "must be registered topic")
+                .ensureWhen(this._manager.distributedObserverTopic != null, (t) => this._manager.distributedObserverTopic.name !== t, "must not publish directly to distributed observer topic");
             given(events, "events").ensureHasValue().ensureIsArray();
             events.forEach(event => given(event, "event").ensureHasValue().ensureIsObject()
                 .ensureHasStructure({ id: "string", name: "string" }));
@@ -69,7 +70,7 @@ let RedisEventBus = (() => {
                         }
                         continue;
                     }
-                    if (!this._manager.eventMap.has(event.name))
+                    if (!this._manager.eventMap.has(event.name) && !pubTopic.isForce)
                         continue;
                     const partition = this._manager.mapToPartition(topic, event);
                     if (!partitionEvents.has(partition))

@@ -61,7 +61,7 @@ let RedisEventSubMgr = (() => {
                             partitions.push(partition);
                     }
                     const consumers = partitions
-                        .map(partition => new Consumer(this._client, this._manager, topic.name, partition, topic.flush));
+                        .map(partition => new Consumer(this._client, this._manager, topic.name, partition, topic.isFlush));
                     let processors;
                     if (this._manager.awsLambdaProxyEnabled)
                         processors = consumers.map(_ => new AwsLambdaProxyProcessor(this._manager));

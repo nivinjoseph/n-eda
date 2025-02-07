@@ -9,8 +9,11 @@ export class Topic {
     get publishOnly() { return this._publishOnly; }
     get partitionAffinity() { return this._partitionAffinity; }
     get isDisabled() { return this._isDisabled; }
-    get flush() { return this._flush; }
-    constructor(name, ttlDuration, numPartitions, flush = false) {
+    get isForce() { return this._isForce; }
+    get isFlush() { return this._isFlush; }
+    constructor(name, ttlDuration, numPartitions) {
+        this._isForce = false;
+        this._isFlush = false;
         this._publishOnly = true;
         this._partitionAffinity = null;
         this._isDisabled = false;
@@ -20,11 +23,17 @@ export class Topic {
         this._ttlMinutes = ttlDuration.toMinutes(true);
         given(numPartitions, "numPartitions").ensureHasValue().ensureIsNumber().ensure(t => t > 0);
         this._numPartitions = numPartitions;
-        given(flush, "flush").ensureHasValue().ensureIsBoolean();
-        this._flush = flush;
     }
     subscribe() {
         this._publishOnly = false;
+        return this;
+    }
+    forcePublish() {
+        this._isForce = true;
+        return this;
+    }
+    flushConsume() {
+        this._isFlush = true;
         return this;
     }
     /**
