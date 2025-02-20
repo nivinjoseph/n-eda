@@ -74,7 +74,7 @@ class CommonComponentInstaller implements ComponentInstaller
 }
 
 
-@serialize
+@serialize("Test")
 export class TestEvent extends Serializable implements EdaEvent
 {
     private readonly _id: string;
@@ -103,7 +103,7 @@ export class TestEvent extends Serializable implements EdaEvent
     }
 }
 
-@serialize
+@serialize("Test")
 export class AnalyticEvent extends Serializable implements EdaEvent
 {
     private readonly _id: string;
