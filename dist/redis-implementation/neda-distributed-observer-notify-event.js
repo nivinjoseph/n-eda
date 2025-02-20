@@ -2,7 +2,7 @@ import { __esDecorate, __runInitializers, __setFunctionName } from "tslib";
 import { given } from "@nivinjoseph/n-defensive";
 import { Serializable, serialize } from "@nivinjoseph/n-util";
 let NedaDistributedObserverNotifyEvent = (() => {
-    let _classDecorators = [serialize];
+    let _classDecorators = [serialize("Neda")];
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;

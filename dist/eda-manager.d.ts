@@ -82,3 +82,4 @@ export declare class EdaManager implements Disposable {
     mapToPartition(topic: string, event: EdaEvent): number;
     dispose(): Promise<void>;
 }
+//# sourceMappingURL=eda-manager.d.ts.map

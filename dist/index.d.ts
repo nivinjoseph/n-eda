@@ -21,3 +21,4 @@ import { NedaClearTrackedKeysEvent } from "./redis-implementation/neda-clear-tra
 import { observable, observedEvent, observer } from "./observed-event.js";
 import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
 export { EdaEvent, EdaEventHandler, event, Topic, EventRegistration, EventBus, EventSubMgr, EdaManager, RedisEventBus, RedisEventSubMgr, LambdaDetails, AwsLambdaEventHandler, ApplicationScript, RpcDetails, RpcEventHandler, RpcServer, GrpcDetails, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer, ObserverEdaEventHandler, ObservableWatch };
+//# sourceMappingURL=index.d.ts.map

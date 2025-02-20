@@ -7,3 +7,4 @@ export interface EdaEvent extends Serializable {
     get refType(): string;
 }
 export type EdaEventClass<TEvent extends EdaEvent> = ClassDefinition<TEvent>;
+//# sourceMappingURL=eda-event.d.ts.map

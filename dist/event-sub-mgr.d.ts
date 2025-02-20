@@ -4,3 +4,4 @@ export interface EventSubMgr extends Disposable {
     initialize(manager: EdaManager): void;
     consume(): Promise<void>;
 }
+//# sourceMappingURL=event-sub-mgr.d.ts.map

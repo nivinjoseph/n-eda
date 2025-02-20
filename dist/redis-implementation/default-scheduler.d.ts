@@ -14,3 +14,4 @@ export declare class DefaultScheduler implements Scheduler {
     private _executeAvailableWork;
     private _findWork;
 }
+//# sourceMappingURL=default-scheduler.d.ts.map

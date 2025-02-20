@@ -15,3 +15,4 @@ export declare class GrpcEventHandler {
     private _process;
     private _getErrorMessage;
 }
+//# sourceMappingURL=grpc-event-handler.d.ts.map

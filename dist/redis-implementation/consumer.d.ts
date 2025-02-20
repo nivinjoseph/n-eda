@@ -47,3 +47,4 @@ export declare class Consumer implements Disposable {
     private _decompressEvents;
     private _removeKeys;
 }
+//# sourceMappingURL=consumer.d.ts.map

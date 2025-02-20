@@ -7,3 +7,4 @@ export declare class AwsLambdaProxyProcessor extends Processor {
     protected processEvent(workItem: WorkItem): Promise<void>;
     private _invokeLambda;
 }
+//# sourceMappingURL=aws-lambda-proxy-processor.d.ts.map

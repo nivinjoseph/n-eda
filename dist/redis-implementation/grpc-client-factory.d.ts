@@ -17,3 +17,4 @@ export interface GrpcClient {
         eventId: string;
     }>;
 }
+//# sourceMappingURL=grpc-client-factory.d.ts.map

@@ -34,3 +34,4 @@ export interface RoutedEvent {
     partitionKey: string;
     span: otelApi.Span;
 }
+//# sourceMappingURL=broker.d.ts.map

@@ -17,3 +17,4 @@ export declare class Monitor implements Disposable {
     dispose(): Promise<void>;
     private _initializeMetrics;
 }
+//# sourceMappingURL=monitor.d.ts.map

@@ -17,3 +17,4 @@ export declare class AwsLambdaEventHandler {
     private _process;
     private _getErrorMessage;
 }
+//# sourceMappingURL=aws-lambda-event-handler.d.ts.map

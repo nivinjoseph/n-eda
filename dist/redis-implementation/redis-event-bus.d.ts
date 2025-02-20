@@ -23,3 +23,4 @@ export declare class RedisEventBus implements EventBus {
     private _checkForSubscribers;
     private _fetchSubscribers;
 }
+//# sourceMappingURL=redis-event-bus.d.ts.map

@@ -7,3 +7,4 @@ export declare class GrpcProxyProcessor extends Processor {
     constructor(manager: EdaManager, grpcClientFactory: GrpcClientFactory);
     protected processEvent(workItem: WorkItem): Promise<void>;
 }
+//# sourceMappingURL=grpc-proxy-processor.d.ts.map

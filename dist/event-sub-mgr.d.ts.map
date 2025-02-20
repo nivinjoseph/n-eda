@@ -1,0 +1,1 @@
+{"version":3,"file":"event-sub-mgr.d.ts","sourceRoot":"","sources":["../src/event-sub-mgr.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,UAAU,EAAE,MAAM,qBAAqB,CAAC;AACjD,OAAO,EAAE,UAAU,EAAE,MAAM,kBAAkB,CAAC;AAG9C,MAAM,WAAW,WAAY,SAAQ,UAAU;IAE3C,UAAU,CAAC,OAAO,EAAE,UAAU,GAAG,IAAI,CAAC;IACtC,OAAO,IAAI,OAAO,CAAC,IAAI,CAAC,CAAC;CAC5B"}

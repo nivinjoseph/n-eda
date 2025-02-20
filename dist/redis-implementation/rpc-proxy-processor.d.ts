@@ -7,3 +7,4 @@ export declare class RpcProxyProcessor extends Processor {
     protected processEvent(workItem: WorkItem): Promise<void>;
     private _invokeRPC;
 }
+//# sourceMappingURL=rpc-proxy-processor.d.ts.map

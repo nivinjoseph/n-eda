@@ -15,3 +15,4 @@ export declare class OptimizedScheduler implements Scheduler {
     private _executeAvailableWork;
     private _findWork;
 }
+//# sourceMappingURL=optimized-scheduler.d.ts.map

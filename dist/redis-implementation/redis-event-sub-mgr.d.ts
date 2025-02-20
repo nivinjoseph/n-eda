@@ -20,3 +20,4 @@ export declare class RedisEventSubMgr implements EventSubMgr {
     dispose(): Promise<void>;
     protected onEventReceived(scope: ServiceLocator, topic: string, event: EdaEvent): void;
 }
+//# sourceMappingURL=redis-event-sub-mgr.d.ts.map

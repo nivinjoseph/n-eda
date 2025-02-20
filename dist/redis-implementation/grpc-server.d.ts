@@ -31,3 +31,4 @@ export declare class GrpcServer {
     private _configureShutDown;
     private _changeStatus;
 }
+//# sourceMappingURL=grpc-server.d.ts.map

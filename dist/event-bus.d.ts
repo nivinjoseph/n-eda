@@ -12,3 +12,4 @@ export type ObservableWatch = {
     observableId: string;
     observableEventType: Function | string;
 };
+//# sourceMappingURL=event-bus.d.ts.map

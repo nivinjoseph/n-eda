@@ -11,3 +11,4 @@ export type ObserverEventHandlerObservableDecorator<TEvent extends EdaEvent, Thi
 export declare const observerSymbol: unique symbol;
 export declare function observer<TEvent extends EdaEvent, This extends ObserverEdaEventHandler<TEvent>>(type: ClassDefinition<any>): ObserverEventHandlerObserverDecorator<TEvent, This>;
 export type ObserverEventHandlerObserverDecorator<TEvent extends EdaEvent, This extends ObserverEdaEventHandler<TEvent>> = (target: ObserverEdaEventHandlerClass<TEvent, This>, context: ClassDecoratorContext<ObserverEdaEventHandlerClass<TEvent, This>>) => void;
+//# sourceMappingURL=observed-event.d.ts.map

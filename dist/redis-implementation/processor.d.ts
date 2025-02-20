@@ -23,3 +23,4 @@ export declare abstract class Processor implements Disposable {
     protected abstract processEvent(workItem: WorkItem): Promise<void>;
     private _process;
 }
+//# sourceMappingURL=processor.d.ts.map

@@ -34,3 +34,4 @@ export interface TopicPartitionMetrics {
     productionRate: number;
     consumptionRate: number;
 }
+//# sourceMappingURL=topic.d.ts.map

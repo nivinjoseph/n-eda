@@ -1,0 +1,1 @@
+{"version":3,"file":"lambda-details.d.ts","sourceRoot":"","sources":["../src/lambda-details.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,aAAa;IAE1B,QAAQ,CAAC,MAAM,EAAE,MAAM,CAAC;IACxB,QAAQ,CAAC,QAAQ,EAAE,MAAM,CAAC;IAC1B,WAAW,EAAE;QACT,QAAQ,CAAC,WAAW,EAAE,MAAM,CAAC;QAC7B,QAAQ,CAAC,eAAe,EAAE,MAAM,CAAC;KACpC,CAAC;CACL"}

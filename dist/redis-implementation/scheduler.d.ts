@@ -6,3 +6,4 @@ export interface Scheduler extends Disposable {
 export interface WorkItem extends RoutedEvent {
     deferred: Deferred<void>;
 }
+//# sourceMappingURL=scheduler.d.ts.map

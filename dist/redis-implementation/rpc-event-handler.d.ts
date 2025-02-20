@@ -18,3 +18,4 @@ export declare class RpcEventHandler {
     private _process;
     private _getErrorMessage;
 }
+//# sourceMappingURL=rpc-event-handler.d.ts.map

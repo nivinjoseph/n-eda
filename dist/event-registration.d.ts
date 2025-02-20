@@ -25,3 +25,4 @@ export declare class EventRegistration {
     constructor(eventHandlerType: ClassDefinition<EdaEventHandler<EdaEvent>> | ClassDefinition<ObserverEdaEventHandler<EdaEvent>>);
     static generateObservationKey(observerTypeName: string, observableTypeName: string, observableEventTypeName: string): string;
 }
+//# sourceMappingURL=event-registration.d.ts.map

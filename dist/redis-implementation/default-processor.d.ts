@@ -8,3 +8,4 @@ export declare class DefaultProcessor extends Processor {
     constructor(manager: EdaManager, onEventReceived: (scope: ServiceLocator, topic: string, event: EdaEvent) => void);
     protected processEvent(workItem: WorkItem): Promise<void>;
 }
+//# sourceMappingURL=default-processor.d.ts.map

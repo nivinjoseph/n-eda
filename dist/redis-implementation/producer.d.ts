@@ -17,3 +17,4 @@ export declare class Producer {
     private _incrementPartitionWriteIndex;
     private _storeEvents;
 }
+//# sourceMappingURL=producer.d.ts.map

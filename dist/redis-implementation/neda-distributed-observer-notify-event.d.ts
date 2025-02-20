@@ -16,3 +16,4 @@ export declare class NedaDistributedObserverNotifyEvent extends Serializable imp
     get refType(): string;
     constructor(data: Pick<NedaDistributedObserverNotifyEvent, "observerTypeName" | "observerId" | "observedEventId" | "observedEvent">);
 }
+//# sourceMappingURL=neda-distributed-observer-notify-event.d.ts.map
