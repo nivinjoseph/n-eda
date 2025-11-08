@@ -26,7 +26,7 @@ let NedaDistributedObserverNotifyEvent = (() => {
         get refType() { return this.observerTypeName; }
         constructor(data) {
             super(data);
-            this._observerTypeName = (__runInitializers(this, _instanceExtraInitializers), void 0);
+            this._observerTypeName = __runInitializers(this, _instanceExtraInitializers);
             const { observerTypeName, observerId, observedEventId, observedEvent } = data;
             given(observerTypeName, "observerTypeName").ensureHasValue().ensureIsString();
             this._observerTypeName = observerTypeName;

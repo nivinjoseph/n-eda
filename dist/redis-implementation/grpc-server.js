@@ -128,17 +128,21 @@ export class GrpcServer {
         const serviceDef = Grpc.loadPackageDefinition(packageDef).grpcprocessor;
         const server = new Grpc.Server();
         server.addService(serviceDef[this._serviceName].service, {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
             process: (call, callback) => {
                 if (this._shutdownManager == null || this._shutdownManager.isShutdown) {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback({ code: Grpc.status.UNAVAILABLE });
                     return;
                 }
                 const request = call.request;
                 this._eventHandler.process(request)
                     .then((response) => {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback(null, response);
                 })
                     .catch(error => {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback(error);
                 });
             }
@@ -146,6 +150,7 @@ export class GrpcServer {
         const healthPackageDef = ProtoLoader.loadSync(Path.join(basePath, "grpc-health-check.proto"), options);
         const healthServiceDef = Grpc.loadPackageDefinition(healthPackageDef).grpchealthv1;
         server.addService(healthServiceDef["Health"].service, {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
             check: (_call, callback) => {
                 // const service = call.request ?? "";
                 // const status = this._statusMap[service];
@@ -165,8 +170,10 @@ export class GrpcServer {
                 // }
                 const status = this._statusMap[this._serviceName];
                 if (status === ServingStatus.SERVING)
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback(null, { status });
                 else
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback({ code: Grpc.status.UNAVAILABLE });
             }
         });

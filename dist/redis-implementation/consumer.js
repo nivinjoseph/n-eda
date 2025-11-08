@@ -77,7 +77,6 @@ export class Consumer {
         await this._loadTrackedKeys();
         await this._logger.logInfo(`Loaded tracked keys for Consumer ${this.id} => ${this._trackedKeysSet.size}`);
         const maxReadAttempts = 50;
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             if (this._isDisposed)
                 return;
@@ -292,7 +291,6 @@ export class Consumer {
                     reject(err);
                     return;
                 }
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                 resolve(results.map(value => value != null ? JSON.parse(value) : 0));
             }).catch(e => reject(e));
         });

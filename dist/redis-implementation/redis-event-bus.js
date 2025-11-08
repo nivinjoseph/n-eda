@@ -147,6 +147,7 @@ let RedisEventBus = (() => {
         //     // This information is used to create a delta to figure out unsubscribes automatically
         //     // for each watch key, there is a set of subscribers
         // }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
         async subscribeToObservables(observerType, observerId, watches) {
             given(observerType, "observerType").ensureHasValue().ensureIsFunction();
             given(observerId, "observerId").ensureHasValue().ensureIsString();
@@ -176,6 +177,7 @@ let RedisEventBus = (() => {
             }
             await Promise.all(promises);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
         async unsubscribeFromObservables(observerType, observerId, watches) {
             given(observerType, "observerType").ensureHasValue().ensureIsFunction();
             given(observerId, "observerId").ensureHasValue().ensureIsString();

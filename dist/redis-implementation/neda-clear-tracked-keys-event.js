@@ -18,7 +18,7 @@ let NedaClearTrackedKeysEvent = (() => {
         get refType() { return "neda"; }
         constructor(data) {
             super(data);
-            this._id = (__runInitializers(this, _instanceExtraInitializers), void 0);
+            this._id = __runInitializers(this, _instanceExtraInitializers);
             const { id } = data;
             given(id, "id").ensureHasValue().ensureIsString();
             this._id = id;
