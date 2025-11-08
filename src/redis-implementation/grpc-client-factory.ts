@@ -5,10 +5,10 @@ import { ApplicationException } from "@nivinjoseph/n-exception";
 import { Logger } from "@nivinjoseph/n-log";
 import { Disposable, Duration, Make, Uuid } from "@nivinjoseph/n-util";
 import Path from "node:path";
-import { ConnectionOptions } from "tls";
+// import { ConnectionOptions } from "tls";
+import { fileURLToPath } from "node:url";
 import { EdaManager } from "../eda-manager.js";
 import { WorkItem } from "./scheduler.js";
-import { fileURLToPath } from "node:url";
 
 
 export class GrpcClientFactory
@@ -48,32 +48,34 @@ export class GrpcClientFactory
 
         const packageDef = ProtoLoader.loadSync(Path.join(basePath, "grpc-processor.proto"), options);
         this._serviceDef = Grpc.loadPackageDefinition(packageDef).grpcprocessor;
+        // FIXME: might need this to work in aws
+        // let isSecure = this._manager.grpcDetails!.host !== "localhost";
+        // if (this._manager.grpcDetails!.isSecure != null)
+        //     isSecure = this._manager.grpcDetails!.isSecure!;
+            
+        // if (isSecure)
+        // {
+        //     const creds = Grpc.credentials.createSsl();
+        //     const origConnectionOptions = creds._createSecureConnector().bind(creds);
+        //     creds._getConnectionOptions = function (): ConnectionOptions
+        //     {
+        //         const connOptions = origConnectionOptions()!;
+        //         connOptions.rejectUnauthorized = false;
+        //         return connOptions;
+        //     };
+            
+        //     this._creds = creds;
+            
+        //     console.log("SECURE GRPC CREDENTIALS CREATED");
+        // }
+        // else
+        // {
+        //     this._creds = Grpc.credentials.createInsecure();
+            
+        //     console.log("INSECURE GRPC CREDENTIALS CREATED");
+        // }
         
-        let isSecure = this._manager.grpcDetails!.host !== "localhost";
-        if (this._manager.grpcDetails!.isSecure != null)
-            isSecure = this._manager.grpcDetails!.isSecure!;
-            
-        if (isSecure)
-        {
-            const creds = Grpc.credentials.createSsl();
-            const origConnectionOptions = creds._getConnectionOptions.bind(creds);
-            creds._getConnectionOptions = function (): ConnectionOptions
-            {
-                const connOptions = origConnectionOptions()!;
-                connOptions.rejectUnauthorized = false;
-                return connOptions;
-            };
-            
-            this._creds = creds;
-            
-            console.log("SECURE GRPC CREDENTIALS CREATED");
-        }
-        else
-        {
-            this._creds = Grpc.credentials.createInsecure();
-            
-            console.log("INSECURE GRPC CREDENTIALS CREATED");
-        }
+        this._creds = Grpc.credentials.createInsecure();
         
         let connectionPoolSize = this._manager.grpcDetails!.connectionPoolSize ?? 50;
         if (connectionPoolSize <= 0)

@@ -13,6 +13,7 @@ export class Monitor implements Disposable
     private readonly _brokers: ReadonlyArray<Broker>;
     private readonly _consumers = new Map<string, Consumer>();
     private readonly _logger: Logger;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     private readonly _listener: Function;
     private _metricsInterval: NodeJS.Timeout | null = null;
     private _isRunning = false;

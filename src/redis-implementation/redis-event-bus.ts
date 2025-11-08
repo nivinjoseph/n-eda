@@ -211,6 +211,7 @@ export class RedisEventBus implements EventBus
     //     // for each watch key, there is a set of subscribers
     // }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     public async subscribeToObservables(observerType: Function, observerId: string, watches: ReadonlyArray<ObservableWatch>): Promise<void>
     {
         given(observerType, "observerType").ensureHasValue().ensureIsFunction();
@@ -256,6 +257,7 @@ export class RedisEventBus implements EventBus
         await Promise.all(promises);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     public async unsubscribeFromObservables(observerType: Function, observerId: string, watches: ReadonlyArray<ObservableWatch>): Promise<void>
     {
         given(observerType, "observerType").ensureHasValue().ensureIsFunction();

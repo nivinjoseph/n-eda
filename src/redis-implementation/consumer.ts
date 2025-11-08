@@ -127,7 +127,6 @@ export class Consumer implements Disposable
 
         const maxReadAttempts = 50;
 
-        // eslint-disable-next-line no-constant-condition
         while (true)
         {
             if (this._isDisposed)
@@ -417,7 +416,6 @@ export class Consumer implements Disposable
                     return;
                 }
 
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                 resolve(results!.map(value => value != null ? JSON.parse(value) as number : 0));
             }).catch(e => reject(e));
         });

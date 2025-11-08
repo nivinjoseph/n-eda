@@ -1,8 +1,8 @@
 import Zlib from "zlib";
 import { given } from "@nivinjoseph/n-defensive";
 import { Make, Profiler, Uuid } from "@nivinjoseph/n-util";
-import Grpc from "@grpc/grpc-js";
-import { ConnectionOptions } from "tls";
+// import Grpc from "@grpc/grpc-js";
+// import { ConnectionOptions } from "tls";
 import { describe, test } from "node:test";
 import assert from "node:assert";
 // import * as MessagePack from "msgpack-lite";
@@ -255,21 +255,22 @@ await describe("compression tests", async () =>
     //     Assert.ok(true);
     // });
     
-    await test("grpc", () =>
-    {
-        const creds = Grpc.credentials.createSsl();
-        const origConnectionOptions = creds._getConnectionOptions.bind(creds);
-        creds._getConnectionOptions = function (): ConnectionOptions
-        {
-            const connOptions = origConnectionOptions()!;
-            connOptions.rejectUnauthorized = false;
-            return connOptions;
-        }; 
+    // FIXME: might need this to work in aws
+    // await test("grpc", () =>
+    // {
+    //     const creds = Grpc.credentials.createSsl();
+    //     const origConnectionOptions = creds._getConnectionOptions.bind(creds);
+    //     creds._getConnectionOptions = function (): ConnectionOptions
+    //     {
+    //         const connOptions = origConnectionOptions()!;
+    //         connOptions.rejectUnauthorized = false;
+    //         return connOptions;
+    //     }; 
         
-        const options = creds._getConnectionOptions();
-        console.log(options);
-        assert.strictEqual(options!.rejectUnauthorized, false);
-    });
+    //     const options = creds._getConnectionOptions();
+    //     console.log(options);
+    //     assert.strictEqual(options!.rejectUnauthorized, false);
+    // });
     
     await test("JSON with Deflate", async () =>
     {

@@ -196,10 +196,12 @@ export class GrpcServer
         const server = new Grpc.Server();
 
         server.addService((serviceDef as any)[this._serviceName].service, {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
             process: (call: any, callback: Function) =>
             {
                 if (this._shutdownManager == null || this._shutdownManager.isShutdown)
                 {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback({ code: Grpc.status.UNAVAILABLE });
                     return;
                 }
@@ -209,10 +211,12 @@ export class GrpcServer
                 this._eventHandler.process(request)
                     .then((response) =>
                     {
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                         callback(null, response);
                     })
                     .catch(error =>
                     {
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                         callback(error);
                     });
             }
@@ -222,6 +226,7 @@ export class GrpcServer
         const healthServiceDef = Grpc.loadPackageDefinition(healthPackageDef).grpchealthv1;
 
         server.addService((healthServiceDef as any)["Health"].service, {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
             check: (_call: any, callback: Function) =>
             {
                 // const service = call.request ?? "";
@@ -244,8 +249,10 @@ export class GrpcServer
 
                 const status = this._statusMap[this._serviceName];
                 if (status === ServingStatus.SERVING)
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback(null, { status });
                 else
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                     callback({ code: Grpc.status.UNAVAILABLE });
             }
         });
