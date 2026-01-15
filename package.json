@@ -1,6 +1,6 @@
 {
     "name": "@nivinjoseph/n-eda",
-    "version": "6.0.5",
+    "version": "6.0.6",
     "description": "Event Driven Architecture framework",
     "packageManager": "yarn@4.0.2",
     "type": "module",
@@ -18,7 +18,7 @@
         "setup-redis-server": "docker run --name test-redis -p 6379:6379 -d redis:7.0 && sleep 5",
         "teardown-redis-server": "docker stop test-redis && docker rm test-redis",
         "test": "yarn setup-redis-server && yarn ts-build && node --test --enable-source-maps ./test/**/*.test.js || true && yarn teardown-redis-server",
-        "publish-package": "yarn ts-build-dist && git add . && git commit -m 'preparing to publish new version' && npm version patch && git push && npm publish --access=public"
+        "publish-package": "yarn ts-build-dist && git add . && git commit -m 'preparing to publish new version' && git push && npm publish --access=public"
     },
     "repository": {
         "type": "git",
@@ -46,22 +46,22 @@
         "typescript-eslint": "^8.46.3"
     },
     "dependencies": {
-        "@aws-sdk/client-lambda": "^3.927.0",
-        "@grpc/grpc-js": "1.14.1",
+        "@aws-sdk/client-lambda": "^3.969.0",
+        "@grpc/grpc-js": "1.14.3",
         "@grpc/proto-loader": "^0.8.0",
-        "@nivinjoseph/n-config": "^2.0.2",
+        "@nivinjoseph/n-config": "^2.0.3",
         "@nivinjoseph/n-defensive": "^2.0.2",
         "@nivinjoseph/n-exception": "^2.0.2",
         "@nivinjoseph/n-ext": "^2.0.2",
-        "@nivinjoseph/n-ject": "^3.0.3",
-        "@nivinjoseph/n-log": "^3.0.5",
-        "@nivinjoseph/n-svc": "^3.0.3",
-        "@nivinjoseph/n-util": "3.0.2",
+        "@nivinjoseph/n-ject": "^3.0.4",
+        "@nivinjoseph/n-log": "^3.0.6",
+        "@nivinjoseph/n-svc": "^3.0.6",
+        "@nivinjoseph/n-util": "3.2.0",
         "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/sdk-node": "^0.208.0",
+        "@opentelemetry/sdk-node": "^0.210.0",
         "@opentelemetry/semantic-conventions": "^1.38.0",
         "axios": "^1.13.2",
-        "ioredis": "^5.8.2",
+        "ioredis": "^5.9.1",
         "murmurhash3js": "^3.0.1"
     },
     "engines": {
