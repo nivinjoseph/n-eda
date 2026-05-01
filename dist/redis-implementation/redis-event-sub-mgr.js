@@ -113,6 +113,8 @@ let RedisEventSubMgr = (() => {
             given(scope, "scope").ensureHasValue().ensureIsObject();
             given(topic, "topic").ensureHasValue().ensureIsString();
             given(event, "event").ensureHasValue().ensureIsObject();
+            const edaContext = scope.resolve("EdaContext");
+            edaContext.topic = topic;
         }
     };
     __setFunctionName(_classThis, "RedisEventSubMgr");

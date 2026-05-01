@@ -7,6 +7,7 @@ import MurmurHash from "murmurhash3js";
 import { AwsLambdaEventHandler } from "./redis-implementation/aws-lambda-event-handler.js";
 import { RpcEventHandler } from "./redis-implementation/rpc-event-handler.js";
 import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
+import { DefaultEdaContext } from "./eda-context.js";
 // import { ConsumerTracer } from "./event-handler-tracer";
 // public
 export class EdaManager {
@@ -71,6 +72,7 @@ export class EdaManager {
         this._eventMap = new Map();
         this._observerEventMap = new Map();
         // this._wildKeys = new Array<string>();
+        this._container.registerScoped("EdaContext", DefaultEdaContext);
     }
     useInstaller(installer) {
         given(installer, "installer").ensureHasValue().ensureIsObject();
