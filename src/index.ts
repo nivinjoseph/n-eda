@@ -22,6 +22,7 @@ import { GrpcServer } from "./redis-implementation/grpc-server.js";
 import { NedaClearTrackedKeysEvent } from "./redis-implementation/neda-clear-tracked-keys-event.js";
 import { observable, observedEvent, observer } from "./observed-event.js";
 import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
+import { EdaContext } from "./eda-context.js";
 
 //@ts-expect-error polyfill to use metadata object
 Symbol.metadata ??= Symbol("Symbol.metadata");
@@ -52,5 +53,7 @@ export
     observer,
 
     ObserverEdaEventHandler,
-    ObservableWatch
+    ObservableWatch,
+    
+    EdaContext
 };
