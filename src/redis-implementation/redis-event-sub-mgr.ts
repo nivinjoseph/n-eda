@@ -17,6 +17,7 @@ import { GrpcProxyProcessor } from "./grpc-proxy-processor.js";
 import { Monitor } from "./monitor.js";
 import { Processor } from "./processor.js";
 import { RpcProxyProcessor } from "./rpc-proxy-processor.js";
+import { DefaultEdaContext } from "../eda-context.js";
 // import { ConsumerProfiler } from "./consumer-profiler";
 // import { ProfilingConsumer } from "./profiling-consumer";
 
@@ -157,5 +158,8 @@ export class RedisEventSubMgr implements EventSubMgr
         given(scope, "scope").ensureHasValue().ensureIsObject();
         given(topic, "topic").ensureHasValue().ensureIsString();
         given(event, "event").ensureHasValue().ensureIsObject();
+        
+        const edaContext = scope.resolve<DefaultEdaContext>("EdaContext");
+        edaContext.topic = topic;
     }
 }

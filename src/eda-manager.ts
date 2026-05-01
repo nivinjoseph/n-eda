@@ -16,6 +16,7 @@ import { RpcEventHandler } from "./redis-implementation/rpc-event-handler.js";
 import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
 import { GrpcDetails } from "./grpc-details.js";
 import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
+import { DefaultEdaContext } from "./eda-context.js";
 // import { ConsumerTracer } from "./event-handler-tracer";
 
 // public
@@ -111,6 +112,8 @@ export class EdaManager implements Disposable
         this._eventMap = new Map<string, EventRegistration>();
         this._observerEventMap = new Map<string, EventRegistration>();
         // this._wildKeys = new Array<string>();
+        
+        this._container.registerScoped("EdaContext", DefaultEdaContext);
     }
 
 
