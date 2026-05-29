@@ -125,7 +125,9 @@ export class Consumer implements Disposable
         await this._loadTrackedKeys();
         await this._logger.logInfo(`Loaded tracked keys for Consumer ${this.id} => ${this._trackedKeysSet.size}`);
 
-        const maxReadAttempts = 50;
+        const maxReadAttempts = 200;
+        const failedReadShortDelayMs = 100;
+        const failedReadLongDelayMs = 250;
 
         while (true)
         {
@@ -195,7 +197,11 @@ export class Consumer implements Disposable
                         if (this._isDisposed)
                             return;
 
-                        await Delay.milliseconds(100);
+                        await Delay.milliseconds(
+                            numReadAttempts < (maxReadAttempts / 4)
+                                ? failedReadShortDelayMs
+                                : failedReadLongDelayMs
+                        );
 
                         eventData = await this._retrieveEvent(item.key);
                         numReadAttempts++;

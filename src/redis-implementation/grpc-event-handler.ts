@@ -55,6 +55,7 @@ export class GrpcEventHandler
         {
             await this._logger!.logError(error as any);
             
+            // eslint-disable-next-line preserve-caught-error
             throw new Error(this._getErrorMessage(error));
         }
     }
@@ -115,7 +116,7 @@ export class GrpcEventHandler
 
     private _getErrorMessage(exp: Exception | Error | any): string
     {
-        let logMessage = "";
+        let logMessage: string;
         try 
         {
             if (exp instanceof Exception)

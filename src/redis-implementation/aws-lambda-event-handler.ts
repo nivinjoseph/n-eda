@@ -118,7 +118,7 @@ export class AwsLambdaEventHandler
     
     private _getErrorMessage(exp: Exception | Error | any): string
     {
-        let logMessage = "";
+        let logMessage: string;
         try 
         {
             if (exp instanceof Exception)
