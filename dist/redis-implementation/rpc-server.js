@@ -8,14 +8,20 @@ import Http from "node:http";
 import Url from "node:url";
 import { RpcEventHandler } from "./rpc-event-handler.js";
 export class RpcServer {
+    _port;
+    _host;
+    _container;
+    _logger;
+    _startupScriptKey = "$startupScript";
+    _hasStartupScript = false;
+    _shutdownScriptKey = "$shutdownScript";
+    _hasShutdownScript = false;
+    _disposeActions = new Array();
+    _eventHandler;
+    _server;
+    _isBootstrapped = false;
+    _shutdownManager = null;
     constructor(port, host, container, logger) {
-        this._startupScriptKey = "$startupScript";
-        this._hasStartupScript = false;
-        this._shutdownScriptKey = "$shutdownScript";
-        this._hasShutdownScript = false;
-        this._disposeActions = new Array();
-        this._isBootstrapped = false;
-        this._shutdownManager = null;
         given(port, "port").ensureHasValue().ensureIsNumber();
         this._port = port;
         given(host, "host").ensureIsString();
@@ -23,7 +29,7 @@ export class RpcServer {
         given(container, "container").ensureHasValue().ensureIsType(Container);
         this._container = container;
         given(logger, "logger").ensureIsObject();
-        this._logger = logger !== null && logger !== void 0 ? logger : new ConsoleLogger({
+        this._logger = logger ?? new ConsoleLogger({
             useJsonFormat: ConfigurationManager.getConfig("env") !== "dev"
         });
     }
@@ -152,8 +158,7 @@ export class RpcServer {
             }
         });
         return new Promise((resolve, _reject) => {
-            var _a;
-            this._server = server.listen(this._port, (_a = this._host) !== null && _a !== void 0 ? _a : undefined, () => {
+            this._server = server.listen(this._port, this._host ?? undefined, () => {
                 resolve();
             });
         });

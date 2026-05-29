@@ -3,14 +3,14 @@ import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Deferred, Duration } from "@nivinjoseph/n-util";
 import { Queue } from "./queue.js";
 export class OptimizedScheduler {
+    _queues = new Map();
+    _processing = new Set();
+    _processors = new Queue();
+    _partitionQueue = new Queue();
+    _cleanupDuration = Duration.fromHours(1).toMilliSeconds();
+    _cleanupTime = Date.now() + this._cleanupDuration;
+    _isDisposed = false;
     constructor(processors) {
-        this._queues = new Map();
-        this._processing = new Set();
-        this._processors = new Queue();
-        this._partitionQueue = new Queue();
-        this._cleanupDuration = Duration.fromHours(1).toMilliSeconds();
-        this._cleanupTime = Date.now() + this._cleanupDuration;
-        this._isDisposed = false;
         given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         processors.forEach(t => {
             this._processors.enqueue(t);
@@ -25,7 +25,10 @@ export class OptimizedScheduler {
         if (this._isDisposed)
             return Promise.reject(new ObjectDisposedException("Scheduler"));
         const deferred = new Deferred();
-        const workItem = Object.assign(Object.assign({}, routedEvent), { deferred });
+        const workItem = {
+            ...routedEvent,
+            deferred
+        };
         const queue = this._queues.get(workItem.partitionKey);
         if (queue)
             queue.enqueue(workItem);

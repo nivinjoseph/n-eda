@@ -13,25 +13,34 @@ import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-
 // import * as MessagePack from "msgpackr";
 // import * as Snappy from "snappy";
 export class Consumer {
+    _edaPrefix = "n-eda";
+    _nedaClearTrackedKeysEventName = NedaClearTrackedKeysEvent.getTypeName();
+    _nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
+    // private readonly _defaultDelayMS = 100;
+    _client;
+    _manager;
+    _logger;
+    _topic;
+    _partition;
+    _cleanKeys;
+    // private readonly _trackedKeysKey: string;
+    _flush;
+    _isDisposed = false;
+    _maxTrackedSize = 3000;
+    _keepTrackedSize = 1000;
+    _trackedKeysArray = new Array();
+    _trackedKeysSet = new Set();
+    _keysToTrack = new Array();
+    _consumePromise = null;
+    _broker = null;
+    _delayCanceller = null;
+    _lastReportTime = 0;
     get _writeIndexKey() { return `${this.id}-write-index`; }
     get _readIndexKey() { return `${this._fullId}-read-index`; }
     get _trackedKeysKey() { return `${this._fullId}-tracked_keys`; }
     get _fullId() { return `${this.id}-${this._manager.consumerGroupId}`; }
     get id() { return `{${this._edaPrefix}-${this._topic}-${this._partition}}`; }
     constructor(client, manager, topic, partition, flush = false) {
-        this._edaPrefix = "n-eda";
-        this._nedaClearTrackedKeysEventName = NedaClearTrackedKeysEvent.getTypeName();
-        this._nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
-        this._isDisposed = false;
-        this._maxTrackedSize = 3000;
-        this._keepTrackedSize = 1000;
-        this._trackedKeysArray = new Array();
-        this._trackedKeysSet = new Set();
-        this._keysToTrack = new Array();
-        this._consumePromise = null;
-        this._broker = null;
-        this._delayCanceller = null;
-        this._lastReportTime = 0;
         given(client, "client").ensureHasValue().ensureIsObject();
         this._client = client;
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
@@ -56,16 +65,15 @@ export class Consumer {
         this._consumePromise = this._beginConsume();
     }
     async dispose() {
-        var _a;
         if (!this._isDisposed) {
             this._isDisposed = true;
             if (this._delayCanceller != null)
                 this._delayCanceller.cancel();
             // console.warn(`Disposing consumer ${this.id}`);
         }
-        return ((_a = this._consumePromise) === null || _a === void 0 ? void 0 : _a.then(() => {
+        return this._consumePromise?.then(() => {
             // console.warn(`Consumer disposed ${this.id}`);
-        })) || Promise.resolve().then(() => {
+        }) || Promise.resolve().then(() => {
             // console.warn(`Consumer disposed ${this.id}`);
         });
     }
@@ -76,7 +84,9 @@ export class Consumer {
     async _beginConsume() {
         await this._loadTrackedKeys();
         await this._logger.logInfo(`Loaded tracked keys for Consumer ${this.id} => ${this._trackedKeysSet.size}`);
-        const maxReadAttempts = 50;
+        const maxReadAttempts = 200;
+        const failedReadShortDelayMs = 100;
+        const failedReadLongDelayMs = 250;
         while (true) {
             if (this._isDisposed)
                 return;
@@ -125,7 +135,9 @@ export class Consumer {
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                         if (this._isDisposed)
                             return;
-                        await Delay.milliseconds(100);
+                        await Delay.milliseconds(numReadAttempts < (maxReadAttempts / 4)
+                            ? failedReadShortDelayMs
+                            : failedReadLongDelayMs);
                         eventData = await this._retrieveEvent(item.key);
                         numReadAttempts++;
                     }
@@ -193,8 +205,7 @@ export class Consumer {
         }
     }
     async _attemptRoute(eventName, eventRegistration, eventIndex, eventKey, eventId, rawEvent, event) {
-        var _a;
-        const traceData = (_a = rawEvent["$traceData"]) !== null && _a !== void 0 ? _a : {};
+        const traceData = rawEvent["$traceData"] ?? {};
         const parentContext = otelApi.propagation.extract(otelApi.ROOT_CONTEXT, traceData);
         const tracer = otelApi.trace.getTracer("n-eda");
         const span = tracer.startSpan(`event.${event.name} receive`, {

@@ -3,6 +3,15 @@ import { eventSymbol } from "./event.js";
 import { observableSymbol, observedEventSymbol, observerSymbol } from "./observed-event.js";
 // public
 export class EventRegistration {
+    _eventHandlerType;
+    _eventHandlerTypeName;
+    _eventType;
+    _eventTypeName;
+    _isObservedEvent = false;
+    _observableType = null;
+    _observableTypeName = null;
+    _observerType = null;
+    _observerTypeName = null;
     get eventHandlerType() { return this._eventHandlerType; }
     get eventHandlerTypeName() { return this._eventHandlerTypeName; }
     get eventType() { return this._eventType; }
@@ -28,11 +37,6 @@ export class EventRegistration {
         return EventRegistration.generateObservationKey(this.observerTypeName, this.observableTypeName, this.eventTypeName);
     }
     constructor(eventHandlerType) {
-        this._isObservedEvent = false;
-        this._observableType = null;
-        this._observableTypeName = null;
-        this._observerType = null;
-        this._observerTypeName = null;
         const eventHandlerName = eventHandlerType.getTypeName();
         given(eventHandlerType, "eventHandlerType").ensureHasValue().ensureIsFunction()
             .ensure(t => t[Symbol.metadata] != null, `EventHandler '${eventHandlerName}' has no decorators applied to it`)

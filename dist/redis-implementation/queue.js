@@ -1,12 +1,12 @@
 export class Queue {
+    _first = null;
+    _last = null;
+    _length = 0;
     get isEmpty() { return this._first === null; }
-    get peek() { var _a, _b; return (_b = (_a = this._first) === null || _a === void 0 ? void 0 : _a.item) !== null && _b !== void 0 ? _b : null; }
+    get peek() { return this._first?.item ?? null; }
     get length() { return this._length; }
     constructor(items) {
-        this._first = null;
-        this._last = null;
-        this._length = 0;
-        items === null || items === void 0 ? void 0 : items.forEach(t => this.enqueue(t));
+        items?.forEach(t => this.enqueue(t));
     }
     enqueue(item) {
         const node = {

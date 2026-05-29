@@ -10,19 +10,25 @@ import Path from "node:path";
 import { GrpcEventHandler } from "./grpc-event-handler.js";
 import { fileURLToPath } from "node:url";
 export class GrpcServer {
+    _port;
+    _host;
+    _container;
+    _logger;
+    _startupScriptKey = "$startupScript";
+    _hasStartupScript = false;
+    _shutdownScriptKey = "$shutdownScript";
+    _hasShutdownScript = false;
+    _disposeActions = new Array();
+    _eventHandler;
+    _serviceName = "EdaService";
+    _statusMap = {
+        "": ServingStatus.NOT_SERVING,
+        [this._serviceName]: ServingStatus.NOT_SERVING
+    };
+    _server;
+    _isBootstrapped = false;
+    _shutdownManager = null;
     constructor(port, host, container, logger) {
-        this._startupScriptKey = "$startupScript";
-        this._hasStartupScript = false;
-        this._shutdownScriptKey = "$shutdownScript";
-        this._hasShutdownScript = false;
-        this._disposeActions = new Array();
-        this._serviceName = "EdaService";
-        this._statusMap = {
-            "": ServingStatus.NOT_SERVING,
-            [this._serviceName]: ServingStatus.NOT_SERVING
-        };
-        this._isBootstrapped = false;
-        this._shutdownManager = null;
         given(port, "port").ensureHasValue().ensureIsNumber();
         this._port = port;
         given(host, "host").ensureIsString();
@@ -30,7 +36,7 @@ export class GrpcServer {
         given(container, "container").ensureHasValue().ensureIsType(Container);
         this._container = container;
         given(logger, "logger").ensureIsObject();
-        this._logger = logger !== null && logger !== void 0 ? logger : new ConsoleLogger({
+        this._logger = logger ?? new ConsoleLogger({
             useJsonFormat: ConfigurationManager.getConfig("env") !== "dev"
         });
     }

@@ -6,6 +6,16 @@ import { EdaManager } from "../eda-manager.js";
 import * as otelApi from "@opentelemetry/api";
 import * as semCon from "@opentelemetry/semantic-conventions";
 export class Processor {
+    _manager;
+    // private readonly _consumerTracer: ConsumerTracer | null;
+    // private readonly _hasConsumerTracer: boolean;
+    _logger;
+    _availabilityObserver = new Observer("available");
+    _doneProcessingObserver = new Observer("done-processing");
+    _currentWorkItem = null;
+    _processPromise = null;
+    _isDisposed = false;
+    _delayCanceller = null;
     get _isInitialized() {
         return this._availabilityObserver.hasSubscriptions && this._doneProcessingObserver.hasSubscriptions;
     }
@@ -15,12 +25,6 @@ export class Processor {
     get doneProcessing() { return this._doneProcessingObserver; }
     get isBusy() { return this._currentWorkItem != null; }
     constructor(manager) {
-        this._availabilityObserver = new Observer("available");
-        this._doneProcessingObserver = new Observer("done-processing");
-        this._currentWorkItem = null;
-        this._processPromise = null;
-        this._isDisposed = false;
-        this._delayCanceller = null;
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
         this._manager = manager;
         // this._consumerTracer = this._manager.consumerTracer;
@@ -46,16 +50,15 @@ export class Processor {
             .catch((e) => this._logger.logError(e));
     }
     dispose() {
-        var _a;
         if (!this._isDisposed) {
             this._isDisposed = true;
             // console.warn("Disposing processor");
         }
         if (this._delayCanceller)
             this._delayCanceller.cancel();
-        return ((_a = this._processPromise) === null || _a === void 0 ? void 0 : _a.then(() => {
+        return this._processPromise?.then(() => {
             // console.warn("Processor disposed");
-        })) || Promise.resolve().then(() => {
+        }) || Promise.resolve().then(() => {
             // console.warn("Processor disposed");
         });
     }

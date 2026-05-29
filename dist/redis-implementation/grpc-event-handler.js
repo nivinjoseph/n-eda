@@ -4,11 +4,9 @@ import { Deserializer } from "@nivinjoseph/n-util";
 import { EdaManager } from "../eda-manager.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 export class GrpcEventHandler {
-    constructor() {
-        this._nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
-        this._manager = null;
-        this._logger = null;
-    }
+    _nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
+    _manager = null;
+    _logger = null;
     initialize(manager) {
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager)
             .ensure(t => t.isGrpcConsumer, "GRPC consumer not enabled");
@@ -34,6 +32,7 @@ export class GrpcEventHandler {
         }
         catch (error) {
             await this._logger.logError(error);
+            // eslint-disable-next-line preserve-caught-error
             throw new Error(this._getErrorMessage(error));
         }
     }
@@ -77,7 +76,7 @@ export class GrpcEventHandler {
         }
     }
     _getErrorMessage(exp) {
-        let logMessage = "";
+        let logMessage;
         try {
             if (exp instanceof Exception)
                 logMessage = exp.toString();

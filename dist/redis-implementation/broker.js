@@ -4,11 +4,15 @@ import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { OptimizedScheduler } from "./optimized-scheduler.js";
 import { Topic } from "../topic.js";
 export class Broker {
+    _topic;
+    _consumers;
+    _processors;
+    _scheduler;
+    _metricsTracker = new Map;
+    _isDisposed = false;
     get topic() { return this._topic; }
     get metrics() { return this._metricsTracker; }
     constructor(topic, consumers, processors) {
-        this._metricsTracker = new Map;
-        this._isDisposed = false;
         given(topic, "topic").ensureHasValue().ensureIsType(Topic);
         this._topic = topic;
         given(consumers, "consumers").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);

@@ -3,6 +3,14 @@ import { ArgumentException } from "@nivinjoseph/n-exception";
 import { TypeHelper } from "@nivinjoseph/n-util";
 // public
 export class Topic {
+    _name;
+    _ttlMinutes;
+    _numPartitions;
+    _isForce = false;
+    _isFlush = false;
+    _publishOnly = true;
+    _partitionAffinity = null;
+    _isDisabled = false;
     get name() { return this._name; }
     get ttlMinutes() { return this._ttlMinutes; }
     get numPartitions() { return this._numPartitions; }
@@ -12,11 +20,6 @@ export class Topic {
     get isForce() { return this._isForce; }
     get isFlush() { return this._isFlush; }
     constructor(name, ttlDuration, numPartitions) {
-        this._isForce = false;
-        this._isFlush = false;
-        this._publishOnly = true;
-        this._partitionAffinity = null;
-        this._isDisabled = false;
         given(name, "name").ensureHasValue().ensureIsString();
         this._name = name.trim();
         given(ttlDuration, "ttlDuration").ensureHasValue();

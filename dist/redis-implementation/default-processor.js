@@ -1,6 +1,7 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { Processor } from "./processor.js";
 export class DefaultProcessor extends Processor {
+    _onEventReceived;
     constructor(manager, onEventReceived) {
         super(manager);
         given(onEventReceived, "onEventReceived").ensureHasValue().ensureIsFunction();

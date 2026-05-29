@@ -1,4 +1,4 @@
-import { __esDecorate, __runInitializers, __setFunctionName } from "tslib";
+import { __esDecorate, __runInitializers } from "tslib";
 import { given } from "@nivinjoseph/n-defensive";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { EdaManager } from "../eda-manager.js";
@@ -16,15 +16,24 @@ let RedisEventBus = (() => {
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    var RedisEventBus = _classThis = class {
+    var RedisEventBus = class {
+        static { _classThis = this; }
+        static {
+            const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
+            __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
+            RedisEventBus = _classThis = _classDescriptor.value;
+            if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+            __runInitializers(_classThis, _classExtraInitializers);
+        }
+        _nedaClearTrackedKeysEventName = NedaClearTrackedKeysEvent.getTypeName();
+        _client;
+        _producers = new Map();
+        _isDisposing = false;
+        _isDisposed = false;
+        _disposePromise = null;
+        _manager = null;
+        _logger = null;
         constructor(redisClient) {
-            this._nedaClearTrackedKeysEventName = NedaClearTrackedKeysEvent.getTypeName();
-            this._producers = new Map();
-            this._isDisposing = false;
-            this._isDisposed = false;
-            this._disposePromise = null;
-            this._manager = null;
-            this._logger = null;
             given(redisClient, "redisClient").ensureHasValue().ensureIsObject();
             this._client = redisClient;
         }
@@ -247,19 +256,11 @@ let RedisEventBus = (() => {
                         reject(err);
                         return;
                     }
-                    resolve(val !== null && val !== void 0 ? val : []);
+                    resolve(val ?? []);
                 }).catch(e => reject(e));
             });
         }
     };
-    __setFunctionName(_classThis, "RedisEventBus");
-    (() => {
-        const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
-        __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
-        RedisEventBus = _classThis = _classDescriptor.value;
-        if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
-        __runInitializers(_classThis, _classExtraInitializers);
-    })();
     return RedisEventBus = _classThis;
 })();
 export { RedisEventBus };

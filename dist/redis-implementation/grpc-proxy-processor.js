@@ -3,6 +3,7 @@ import { ApplicationException } from "@nivinjoseph/n-exception";
 import { Processor } from "./processor.js";
 import { GrpcClientFactory } from "./grpc-client-factory.js";
 export class GrpcProxyProcessor extends Processor {
+    _grpcClient;
     constructor(manager, grpcClientFactory) {
         super(manager);
         given(manager, "manager").ensure(t => t.grpcProxyEnabled, "GRPC proxy not enabled");

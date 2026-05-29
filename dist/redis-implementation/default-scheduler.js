@@ -4,9 +4,10 @@ import { Deferred } from "@nivinjoseph/n-util";
  * @deprecated Only used for baselining
  */
 export class DefaultScheduler {
+    _queues = new Map();
+    _processing = new Set();
+    _processors;
     constructor(processors) {
-        this._queues = new Map();
-        this._processing = new Set();
         given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._processors = processors;
         this._processors.forEach(t => {
@@ -16,7 +17,10 @@ export class DefaultScheduler {
     }
     scheduleWork(routedEvent) {
         const deferred = new Deferred();
-        const workItem = Object.assign(Object.assign({}, routedEvent), { deferred });
+        const workItem = {
+            ...routedEvent,
+            deferred
+        };
         if (this._queues.has(workItem.partitionKey))
             this._queues.get(workItem.partitionKey).queue.unshift(workItem);
         else
@@ -32,7 +36,7 @@ export class DefaultScheduler {
         return Promise.resolve();
     }
     _executeAvailableWork(processor) {
-        const availableProcessor = processor !== null && processor !== void 0 ? processor : this._processors.find(t => !t.isBusy);
+        const availableProcessor = processor ?? this._processors.find(t => !t.isBusy);
         if (availableProcessor == null)
             return;
         const workItem = this._findWork();

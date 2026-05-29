@@ -11,6 +11,35 @@ import { DefaultEdaContext } from "./eda-context.js";
 // import { ConsumerTracer } from "./event-handler-tracer";
 // public
 export class EdaManager {
+    _container;
+    _ownsContainer;
+    _topics;
+    _topicMap;
+    _eventMap;
+    _observerEventMap;
+    // private readonly _wildKeys: Array<string>;
+    // private _metricsEnabled = false;
+    _partitionKeyMapper = null;
+    _eventBusRegistered = false;
+    _eventSubMgrRegistered = false;
+    _evtSubMgr = null;
+    _consumerName = "UNNAMED";
+    _consumerGroupId = null;
+    _cleanKeys = false;
+    _distributedObserverTopic = null;
+    // private _consumerTracer: ConsumerTracer | null = null;
+    _awsLambdaDetails = null;
+    _isAwsLambdaConsumer = false;
+    _awsLambdaEventHandler = null;
+    _rpcDetails = null;
+    _isRpcConsumer = false;
+    _rpcEventHandler = null;
+    _grpcDetails = null;
+    _isGrpcConsumer = false;
+    _grpcEventHandler = null;
+    _isDisposed = false;
+    _disposePromise = null;
+    _isBootstrapped = false;
     static get eventBusKey() { return "EventBus"; }
     static get eventSubMgrKey() { return "EventSubMgr"; }
     get containerRegistry() { return this._container; }
@@ -35,29 +64,6 @@ export class EdaManager {
     get partitionKeyMapper() { return this._partitionKeyMapper; }
     // public get metricsEnabled(): boolean { return this._metricsEnabled; }
     constructor(container) {
-        // private readonly _wildKeys: Array<string>;
-        // private _metricsEnabled = false;
-        this._partitionKeyMapper = null;
-        this._eventBusRegistered = false;
-        this._eventSubMgrRegistered = false;
-        this._evtSubMgr = null;
-        this._consumerName = "UNNAMED";
-        this._consumerGroupId = null;
-        this._cleanKeys = false;
-        this._distributedObserverTopic = null;
-        // private _consumerTracer: ConsumerTracer | null = null;
-        this._awsLambdaDetails = null;
-        this._isAwsLambdaConsumer = false;
-        this._awsLambdaEventHandler = null;
-        this._rpcDetails = null;
-        this._isRpcConsumer = false;
-        this._rpcEventHandler = null;
-        this._grpcDetails = null;
-        this._isGrpcConsumer = false;
-        this._grpcEventHandler = null;
-        this._isDisposed = false;
-        this._disposePromise = null;
-        this._isBootstrapped = false;
         given(container, "container").ensureIsObject().ensureIsType(Container);
         if (container == null) {
             this._container = new Container();

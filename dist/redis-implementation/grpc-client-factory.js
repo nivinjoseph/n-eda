@@ -8,11 +8,15 @@ import Path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EdaManager } from "../eda-manager.js";
 export class GrpcClientFactory {
+    _manager;
+    _logger;
+    _endpoint;
+    _serviceDef;
+    _creds;
+    _clients = new Array();
+    // private readonly _disposableClients = new Array<GrpcClientInternal>();
+    _roundRobin = 0;
     constructor(manager) {
-        var _a;
-        this._clients = new Array();
-        // private readonly _disposableClients = new Array<GrpcClientInternal>();
-        this._roundRobin = 0;
         given(manager, "manager").ensureHasValue().ensureIsInstanceOf(EdaManager)
             .ensure(t => t.grpcProxyEnabled, "GRPC proxy not enabled");
         this._manager = manager;
@@ -54,7 +58,7 @@ export class GrpcClientFactory {
         //     console.log("INSECURE GRPC CREDENTIALS CREATED");
         // }
         this._creds = Grpc.credentials.createInsecure();
-        let connectionPoolSize = (_a = this._manager.grpcDetails.connectionPoolSize) !== null && _a !== void 0 ? _a : 50;
+        let connectionPoolSize = this._manager.grpcDetails.connectionPoolSize ?? 50;
         if (connectionPoolSize <= 0)
             connectionPoolSize = 50;
         Make.loop(() => this._clients.push(new GrpcClientFacade(new GrpcClientInternal(this._endpoint, this._serviceDef, this._creds, this._logger))), connectionPoolSize);
@@ -89,18 +93,20 @@ export class GrpcClientFactory {
     }
 }
 class GrpcClientInternal {
+    _id = Uuid.create();
+    _createdAt = Date.now();
+    _client;
+    _logger;
+    _numInvocations = 0;
+    _activeInvocations = 0;
+    _isDisposing = false;
+    _isDisposed = false;
     get id() { return this._id; }
     get isStale() { return (this._createdAt + Duration.fromMinutes(10).toMilliSeconds()) < Date.now(); }
     get isOverused() { return this._numInvocations > 1000; }
     get isActive() { return this._activeInvocations > 0; }
     get isDisposed() { return this._isDisposed; }
     constructor(endpoint, serviceDef, creds, logger) {
-        this._id = Uuid.create();
-        this._createdAt = Date.now();
-        this._numInvocations = 0;
-        this._activeInvocations = 0;
-        this._isDisposing = false;
-        this._isDisposed = false;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         this._client = new serviceDef.EdaService(endpoint, creds);
         this._logger = logger;
@@ -149,6 +155,7 @@ class GrpcClientInternal {
     }
 }
 class GrpcClientFacade {
+    _clientInternal;
     get internal() { return this._clientInternal; }
     constructor(clientInternal) {
         this._clientInternal = clientInternal;

@@ -2,11 +2,16 @@ import { given } from "@nivinjoseph/n-defensive";
 import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Duration } from "@nivinjoseph/n-util";
 export class Monitor {
+    _client;
+    _brokers;
+    _consumers = new Map();
+    _logger;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+    _listener;
+    _metricsInterval = null;
+    _isRunning = false;
+    _isDisposed = false;
     constructor(client, brokers, consumers, logger) {
-        this._consumers = new Map();
-        this._metricsInterval = null;
-        this._isRunning = false;
-        this._isDisposed = false;
         given(client, "client").ensureHasValue().ensureIsObject();
         this._client = client.duplicate();
         given(brokers, "brokers").ensureHasValue().ensureIsArray().ensureIsNotEmpty();
@@ -49,7 +54,10 @@ export class Monitor {
                 topic: broker.topic.name,
                 partitions: [...broker.metrics.entries()]
                     .orderBy(t => t[0])
-                    .map(t => (Object.assign({ partition: t[0] }, t[1])))
+                    .map(t => ({
+                    partition: t[0],
+                    ...t[1]
+                }))
             }));
             this._logger.logInfo(JSON.stringify(metrics))
                 .catch(e => console.error(e));

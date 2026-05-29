@@ -4,11 +4,9 @@ import { Deserializer } from "@nivinjoseph/n-util";
 import { EdaManager } from "../eda-manager.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 export class RpcEventHandler {
-    constructor() {
-        this._nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
-        this._manager = null;
-        this._logger = null;
-    }
+    _nedaDistributedObserverNotifyEventName = NedaDistributedObserverNotifyEvent.getTypeName();
+    _manager = null;
+    _logger = null;
     initialize(manager) {
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager)
             .ensure(t => t.isRpcConsumer, "RPC consumer not enabled");
@@ -79,7 +77,7 @@ export class RpcEventHandler {
         }
     }
     _getErrorMessage(exp) {
-        let logMessage = "";
+        let logMessage;
         try {
             if (exp instanceof Exception)
                 logMessage = exp.toString();

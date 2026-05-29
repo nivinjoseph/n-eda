@@ -1,4 +1,4 @@
-import { __esDecorate, __runInitializers, __setFunctionName } from "tslib";
+import { __esDecorate, __runInitializers } from "tslib";
 import { EdaManager } from "../eda-manager.js";
 // import * as Redis from "redis";
 import { given } from "@nivinjoseph/n-defensive";
@@ -21,15 +21,25 @@ let RedisEventSubMgr = (() => {
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    var RedisEventSubMgr = _classThis = class {
+    var RedisEventSubMgr = class {
+        static { _classThis = this; }
+        static {
+            const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
+            __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
+            RedisEventSubMgr = _classThis = _classDescriptor.value;
+            if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+            __runInitializers(_classThis, _classExtraInitializers);
+        }
+        _client;
+        _logger;
+        _brokers = new Array();
+        _monitor = null;
+        _isDisposing = false;
+        _isDisposed = false;
+        _disposePromise = null;
+        _manager = null;
+        _isConsuming = false;
         constructor(redisClient, logger) {
-            this._brokers = new Array();
-            this._monitor = null;
-            this._isDisposing = false;
-            this._isDisposed = false;
-            this._disposePromise = null;
-            this._manager = null;
-            this._isConsuming = false;
             given(redisClient, "redisClient").ensureHasValue().ensureIsObject();
             this._client = redisClient;
             given(logger, "logger").ensureHasValue().ensureIsObject();
@@ -117,14 +127,6 @@ let RedisEventSubMgr = (() => {
             edaContext.topic = topic;
         }
     };
-    __setFunctionName(_classThis, "RedisEventSubMgr");
-    (() => {
-        const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
-        __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
-        RedisEventSubMgr = _classThis = _classDescriptor.value;
-        if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
-        __runInitializers(_classThis, _classExtraInitializers);
-    })();
     return RedisEventSubMgr = _classThis;
 })();
 export { RedisEventSubMgr };

@@ -6,10 +6,16 @@ import Zlib from "zlib";
 import * as otelApi from "@opentelemetry/api";
 import * as semCon from "@opentelemetry/semantic-conventions";
 export class Producer {
+    _edaPrefix = "n-eda";
+    _key;
+    _client;
+    _logger;
+    _topic;
+    _ttlSeconds;
+    _partition;
     get id() { return `{${this._edaPrefix}-${this._topic}-${this._partition}}`; }
     get writeIndexKey() { return `${this.id}-write-index`; }
     constructor(key, client, logger, topic, ttlMinutes, partition) {
-        this._edaPrefix = "n-eda";
         given(key, "key").ensureHasValue().ensureIsString();
         this._key = key;
         given(client, "client").ensureHasValue().ensureIsObject();

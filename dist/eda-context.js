@@ -1,8 +1,6 @@
 import { given } from "@nivinjoseph/n-defensive";
 export class DefaultEdaContext {
-    constructor() {
-        this._topic = null;
-    }
+    _topic = null;
     get topic() {
         given(this, "this").ensure(t => t._topic != null, "topic not set");
         return this._topic;

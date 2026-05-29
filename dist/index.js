@@ -1,4 +1,3 @@
-var _a;
 import { event } from "./event.js";
 import { EventRegistration } from "./event-registration.js";
 import { EdaManager } from "./eda-manager.js";
@@ -15,7 +14,7 @@ import { GrpcServer } from "./redis-implementation/grpc-server.js";
 import { NedaClearTrackedKeysEvent } from "./redis-implementation/neda-clear-tracked-keys-event.js";
 import { observable, observedEvent, observer } from "./observed-event.js";
 //@ts-expect-error polyfill to use metadata object
-(_a = Symbol.metadata) !== null && _a !== void 0 ? _a : (Symbol.metadata = Symbol("Symbol.metadata"));
+Symbol.metadata ??= Symbol("Symbol.metadata");
 export { event, Topic, EventRegistration, EdaManager, 
 // InMemoryEventBus, InMemoryEventSubMgr,
 RedisEventBus, RedisEventSubMgr, AwsLambdaEventHandler, RpcEventHandler, RpcServer, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer };
