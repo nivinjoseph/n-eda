@@ -77,7 +77,7 @@ export declare class EdaManager implements Disposable {
     proxyToGrpc(grpcDetails: GrpcDetails): this;
     actAsGrpcConsumer(handler: GrpcEventHandler): this;
     enableDistributedObserver(topic: Topic): this;
-    bootstrap(): void;
+    bootstrap(): Promise<void>;
     beginConsumption(): Promise<void>;
     mapToPartition(topic: string, event: EdaEvent): number;
     dispose(): Promise<void>;

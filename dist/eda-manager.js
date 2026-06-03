@@ -236,7 +236,7 @@ export class EdaManager {
         this._distributedObserverTopic = topic;
         return this;
     }
-    bootstrap() {
+    async bootstrap() {
         if (this._isDisposed)
             throw new ObjectDisposedException(this);
         given(this, "this")
@@ -252,7 +252,7 @@ export class EdaManager {
             this._partitionKeyMapper = (edaEvent) => edaEvent.partitionKey;
         this._topics.map(t => this._topicMap.set(t.name, t));
         if (this._ownsContainer)
-            this._container.bootstrap();
+            await this._container.bootstrap();
         this._container.resolve(EdaManager.eventBusKey).initialize(this);
         if (this._eventSubMgrRegistered)
             this._container.resolve(EdaManager.eventSubMgrKey).initialize(this);
