@@ -50,7 +50,7 @@ export class EventHistory implements Disposable
 
 class CommonComponentInstaller implements ComponentInstaller
 {
-    public install(registry: Registry): void
+    public async install(registry: Registry): Promise<void>
     {
         given(registry, "registry").ensureHasValue().ensureIsObject();
 
@@ -203,7 +203,7 @@ class AnalyticEventHandler implements EdaEventHandler<AnalyticEvent>
     }
 }
 
-export function createEdaManager(): EdaManager
+export async function createEdaManager(): Promise<EdaManager>
 {
     const basicTopic = new Topic("basic", Duration.fromHours(1), 25).subscribe();
     const analyticTopic = new Topic("analytic", Duration.fromHours(1), 25).subscribe();
@@ -231,7 +231,7 @@ export function createEdaManager(): EdaManager
         // })
         .registerEventBus(RedisEventBus);
 
-    edaManager.bootstrap();
+    await edaManager.bootstrap();
 
     return edaManager;
 }

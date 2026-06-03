@@ -356,7 +356,7 @@ export class EdaManager implements Disposable
     }
 
 
-    public bootstrap(): void
+    public async bootstrap(): Promise<void>
     {
         if (this._isDisposed)
             throw new ObjectDisposedException(this);
@@ -380,7 +380,7 @@ export class EdaManager implements Disposable
         this._topics.map(t => this._topicMap.set(t.name, t));
 
         if (this._ownsContainer)
-            this._container.bootstrap();
+            await this._container.bootstrap();
 
         this._container.resolve<EventBus>(EdaManager.eventBusKey).initialize(this);
 

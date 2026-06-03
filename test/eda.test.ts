@@ -9,9 +9,9 @@ await describe("eda tests", async () =>
 {
     let edaManager: EdaManager;
 
-    before(() =>
+    before(async () =>
     {
-        edaManager = createEdaManager();
+        edaManager = await createEdaManager();
     });
 
     after(async () =>
