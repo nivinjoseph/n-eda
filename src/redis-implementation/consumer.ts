@@ -4,7 +4,14 @@ import { Delay, DelayCanceller, Deserializer, Disposable, Duration, Make } from 
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Logger } from "@nivinjoseph/n-log";
 import * as otelApi from "@opentelemetry/api";
-import * as semCon from "@opentelemetry/semantic-conventions";
+import {
+    ATTR_MESSAGING_SYSTEM,
+    ATTR_MESSAGING_OPERATION_TYPE,
+    ATTR_MESSAGING_DESTINATION_NAME,
+    ATTR_MESSAGING_DESTINATION_TEMPORARY,
+    ATTR_MESSAGING_MESSAGE_ID,
+    ATTR_MESSAGING_MESSAGE_CONVERSATION_ID
+} from "@opentelemetry/semantic-conventions/incubating";
 import { Redis } from "ioredis";
 import Zlib from "zlib";
 import { EdaEvent } from "../eda-event.js";
@@ -307,14 +314,12 @@ export class Consumer implements Disposable
         const span = tracer.startSpan(`event.${event.name} receive`, {
             kind: otelApi.SpanKind.INTERNAL,
             attributes: {
-                [semCon.SemanticAttributes.MESSAGING_SYSTEM]: "n-eda",
-                [semCon.SemanticAttributes.MESSAGING_OPERATION]: "receive",
-                [semCon.SemanticAttributes.MESSAGING_DESTINATION]: `${this._topic}+++${this._partition}`,
-                [semCon.SemanticAttributes.MESSAGING_DESTINATION_KIND]: "topic",
-                [semCon.SemanticAttributes.MESSAGING_TEMP_DESTINATION]: false,
-                [semCon.SemanticAttributes.MESSAGING_PROTOCOL]: "NEDA",
-                [semCon.SemanticAttributes.MESSAGE_ID]: event.id,
-                [semCon.SemanticAttributes.MESSAGING_CONVERSATION_ID]: event.partitionKey
+                [ATTR_MESSAGING_SYSTEM]: "n-eda",
+                [ATTR_MESSAGING_OPERATION_TYPE]: "receive",
+                [ATTR_MESSAGING_DESTINATION_NAME]: `${this._topic}+++${this._partition}`,
+                [ATTR_MESSAGING_DESTINATION_TEMPORARY]: false,
+                [ATTR_MESSAGING_MESSAGE_ID]: event.id,
+                [ATTR_MESSAGING_MESSAGE_CONVERSATION_ID]: event.partitionKey
             }
         }, parentContext);
 
