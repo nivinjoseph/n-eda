@@ -13,9 +13,10 @@ import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
 import { GrpcServer } from "./redis-implementation/grpc-server.js";
 import { NedaClearTrackedKeysEvent } from "./redis-implementation/neda-clear-tracked-keys-event.js";
 import { observable, observedEvent, observer } from "./observed-event.js";
+import { discoverEventHandlers } from "./discovery/event-handler-discovery.js";
 //@ts-expect-error polyfill to use metadata object
 Symbol.metadata ??= Symbol("Symbol.metadata");
 export { event, Topic, EventRegistration, EdaManager, 
 // InMemoryEventBus, InMemoryEventSubMgr,
-RedisEventBus, RedisEventSubMgr, AwsLambdaEventHandler, RpcEventHandler, RpcServer, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer };
+RedisEventBus, RedisEventSubMgr, AwsLambdaEventHandler, RpcEventHandler, RpcServer, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer, discoverEventHandlers };
 //# sourceMappingURL=index.js.map
