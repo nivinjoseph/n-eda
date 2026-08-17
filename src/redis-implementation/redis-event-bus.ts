@@ -15,6 +15,20 @@ import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-
 import { Producer } from "./producer.js";
 
 // public
+/**
+ * The Redis-backed `EventBus` — the only shipped implementation.
+ *
+ * Contract: register the **class** with `EdaManager.registerEventBus(RedisEventBus)`. It is
+ * `@inject("EdaRedisClient")`, and resolves `"Logger"` from the container during `initialize`, so both DI
+ * keys must be registered by your `ComponentInstaller`.
+ *
+ * Storage model: events are bucketed by partition, each partition's batch is deflate-compressed and stored
+ * under a single `INCR`-allocated slot (`SETEX`), and a pub/sub doorbell wakes the matching consumer. See
+ * `ARCHITECTURE.md` for the full key layout.
+ *
+ * Note: `dispose()` drains for a few seconds and flips a flag — it does **not** close the Redis client.
+ * Register a `Disposable` alongside the client so the connection is actually torn down.
+ */
 @inject("EdaRedisClient")
 export class RedisEventBus implements EventBus
 {
@@ -30,6 +44,10 @@ export class RedisEventBus implements EventBus
     private _logger: Logger = null as any;
 
 
+    /**
+     * @param redisClient - injected from the DI key `"EdaRedisClient"`; shared with every producer and
+     * consumer in the process
+     */
     public constructor(redisClient: Redis)
     {
         given(redisClient, "redisClient").ensureHasValue().ensureIsObject();
@@ -37,6 +55,15 @@ export class RedisEventBus implements EventBus
     }
 
 
+    /**
+     * Binds the bus to its manager and creates one `Producer` per partition of every enabled topic.
+     *
+     * Called by `EdaManager.bootstrap()` — never call it yourself.
+     *
+     * @param manager - the bootstrapping manager
+     * @throws `ObjectDisposedException` if already disposed
+     * @throws if the manager is missing or not an `EdaManager`, or if already initialized
+     */
     public initialize(manager: EdaManager): void
     {
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);

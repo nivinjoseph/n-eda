@@ -12,6 +12,16 @@ import { Scheduler } from "./scheduler.js";
 import { Topic, TopicPartitionMetrics } from "../topic.js";
 
 
+/**
+ * Fans a topic's consumers out onto its processors: owns one `Consumer` and one `Processor` per partition
+ * this process is responsible for, plus the scheduler that enforces per-partition-key ordering.
+ *
+ * Contract: created by `RedisEventSubMgr.consume()`, one per subscribed topic. `initialize()` wires each
+ * consumer to this broker; `route()` hands a read event to the scheduler and resolves once the handler has
+ * succeeded or exhausted its retries.
+ *
+ * Note: always constructs an `OptimizedScheduler`; `DefaultScheduler` is deprecated baseline-only code.
+ */
 export class Broker implements Disposable
 {
     private readonly _topic: Topic;
@@ -94,6 +104,12 @@ export class Broker implements Disposable
 }
 
 
+/**
+ * One event as it travels from a `Consumer` to a `Processor`: the deserialized event plus everything needed
+ * to locate, trace, and acknowledge it.
+ *
+ * Note: internal transport type.
+ */
 export interface RoutedEvent
 {
     consumerId: string;

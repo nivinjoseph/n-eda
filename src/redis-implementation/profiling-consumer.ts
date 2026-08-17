@@ -1,3 +1,6 @@
+// INACTIVE — this file is commented out in its entirety and is unwired. `RedisEventSubMgr` always constructs
+// the standard `Consumer`. Kept for reference only.
+
 // import { ApplicationException } from "@nivinjoseph/n-exception";
 // import { Delay, Deserializer, Make } from "@nivinjoseph/n-util";
 // import { EventRegistration } from "../event-registration";

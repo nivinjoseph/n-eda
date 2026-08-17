@@ -10,6 +10,16 @@ import { ApplicationScript } from "./application-script.js";
 import { RpcEventHandler } from "./rpc-event-handler.js";
 
 
+/**
+ * Standalone HTTP server that hosts a RpcEventHandler as an out-of-process event consumer.
+ *
+ * Contract: construct it, call {@link RpcServer.registerEventHandler} (mandatory), optionally register startup /
+ * shutdown scripts and dispose actions, then call {@link RpcServer.bootstrap}. Every `register*` method must
+ * precede `bootstrap()`. It stands up an `Http.Server` serving `http://<host>:<port>/process` and installs an n-svc
+ * `ShutdownManager` that drains connections on SIGTERM — 2 seconds when `env` is `"dev"`, otherwise 15.
+ *
+ * Note: the transport is insecure and unauthenticated. Run it only on a trusted network.
+ */
 export class RpcServer
 {
     private readonly _port: number;
@@ -33,6 +43,13 @@ export class RpcServer
     private _shutdownManager: ShutdownManager | null = null;
 
 
+    /**
+     * @param port - port to listen on
+     * @param host - interface to bind; nullable but positionally required
+     * @param container - the n-ject container used to resolve scripts and handlers
+     * @param logger - optional; defaults to a `ConsoleLogger` using JSON format outside `env=dev`
+     * @throws if `port` is missing or not a number, or if `container` is missing or not a `Container`
+     */
     public constructor(port: number, host: string | null, container: Container, logger?: Logger | null)
     {
         given(port, "port").ensureHasValue().ensureIsNumber();
@@ -50,6 +67,13 @@ export class RpcServer
         });
     }
 
+    /**
+     * Registers the handler that processes proxied events. **Mandatory** — `bootstrap()` fails without it.
+     *
+     * @param eventHandler - the handler, already passed to `EdaManager.actAsRpcConsumer(...)`
+     * @returns this server, for chaining
+     * @throws if the handler is missing or of the wrong type, or if called after `bootstrap()`
+     */
     public registerEventHandler(eventHandler: RpcEventHandler): this
     {
         given(eventHandler, "eventHandler").ensureHasValue().ensureIsInstanceOf(RpcEventHandler);
@@ -61,6 +85,15 @@ export class RpcServer
         return this;
     }
 
+    /**
+     * Registers a script to run during `bootstrap()`, before the server starts listening.
+     *
+     * @param applicationScriptClass - the script **class**; resolved from the container, so its constructor
+     * dependencies are injected
+     * @returns this server, for chaining
+     * @throws if the class is missing, if a startup script is already registered, or if called after
+     * `bootstrap()`
+     */
     public registerStartupScript(applicationScriptClass: ClassHierarchy<ApplicationScript>): this
     {
         given(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
@@ -72,6 +105,14 @@ export class RpcServer
         return this;
     }
 
+    /**
+     * Registers a script to run during shutdown, after connections have drained.
+     *
+     * @param applicationScriptClass - the script **class**; resolved from the container
+     * @returns this server, for chaining
+     * @throws if the class is missing, if a shutdown script is already registered, or if called after
+     * `bootstrap()`
+     */
     public registerShutdownScript(applicationScriptClass: ClassHierarchy<ApplicationScript>): this
     {
         given(applicationScriptClass, "applicationScriptClass").ensureHasValue().ensureIsFunction();
@@ -83,6 +124,14 @@ export class RpcServer
         return this;
     }
 
+    /**
+     * Registers an arbitrary async cleanup action to run during shutdown. May be called repeatedly; actions
+     * run in registration order.
+     *
+     * @param disposeAction - the cleanup function
+     * @returns this server, for chaining
+     * @throws if the action is missing or not a function, or if called after `bootstrap()`
+     */
     public registerDisposeAction(disposeAction: () => Promise<void>): this
     {
         given(disposeAction, "disposeAction").ensureHasValue().ensureIsFunction();
@@ -115,6 +164,13 @@ export class RpcServer
         return this;
     }
 
+    /**
+     * Starts the server. **Synchronous**, unlike `EdaManager.bootstrap()`.
+     *
+     * Runs the startup script if one was registered, begins listening, and installs the shutdown manager.
+     *
+     * @throws if already bootstrapped, or if no event handler was registered
+     */
     public bootstrap(): void
     {
         given(this, "this")

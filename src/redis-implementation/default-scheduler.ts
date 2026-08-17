@@ -5,6 +5,11 @@ import { Processor } from "./processor.js";
 import { Scheduler, WorkItem } from "./scheduler.js";
 
 /**
+ * A simpler `Scheduler` retained as a performance baseline.
+ *
+ * Note: live code, but **unused** — `Broker` always constructs `OptimizedScheduler`. It upholds the same
+ * one-in-flight-per-partition-key invariant; it is just slower under load.
+ *
  * @deprecated Only used for baselining
  */
 export class DefaultScheduler implements Scheduler

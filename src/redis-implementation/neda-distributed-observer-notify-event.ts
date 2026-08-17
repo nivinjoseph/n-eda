@@ -3,6 +3,19 @@ import { Serializable, serialize } from "@nivinjoseph/n-util";
 import { EdaEvent } from "../eda-event.js";
 
 @serialize("Neda")
+/**
+ * The envelope that carries an observed event to one specific observer instance.
+ *
+ * Contract: created by `RedisEventBus.publish` for each subscriber found in the observable's Redis set, and
+ * published to the topic registered with `EdaManager.enableDistributedObserver(...)`. Its `partitionKey` is
+ * the `observerId`, so every notification for a given observer is processed in order; its `id` combines
+ * observer type, observer id, and the inner event id, making it unique per (observer, event) pair.
+ *
+ * The consumer recognizes it by name, rebuilds the observation key from `observerTypeName` plus the inner
+ * event's `refType` and `name`, and `DefaultProcessor` unwraps `observedEvent` before calling the handler.
+ *
+ * Note: internal framework event — you never construct one.
+ */
 export class NedaDistributedObserverNotifyEvent extends Serializable implements EdaEvent
 {
     private readonly _observerTypeName: string;

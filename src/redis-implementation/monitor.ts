@@ -7,6 +7,17 @@ import { Consumer } from "./consumer.js";
 import { Broker } from "./broker.js";
 
 
+/**
+ * Watches every partition's pub/sub doorbell channel and wakes idle consumers the moment a producer writes,
+ * and periodically logs lag metrics.
+ *
+ * Contract: uses a **duplicated** Redis connection, because a client in subscribe mode cannot serve normal
+ * commands. Without it consumers would still work, but latency would be the 2.5–5 second idle poll rather
+ * than sub-millisecond.
+ *
+ * Note: requires non-empty broker and consumer lists — which is why registering a subscription manager while
+ * every topic is publish-only or disabled fails here.
+ */
 export class Monitor implements Disposable
 {
     private readonly _client: Redis;
