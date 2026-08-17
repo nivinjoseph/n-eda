@@ -3,6 +3,7 @@ import { Deferred } from "@nivinjoseph/n-util";
 import { RoutedEvent } from "./broker.js";
 import { Processor } from "./processor.js";
 import { Scheduler, WorkItem } from "./scheduler.js";
+import { SchedulerMetrics } from "../metrics.js";
 
 /**
  * @deprecated Only used for baselining
@@ -12,6 +13,17 @@ export class DefaultScheduler implements Scheduler
     private readonly _queues = new Map<string, SchedulerQueue>();
     private readonly _processing = new Set<string>();
     private readonly _processors: ReadonlyArray<Processor>;
+
+
+    public get metrics(): SchedulerMetrics
+    {
+        return {
+            queueDepth: [...this._queues.values()].reduce((acc, t) => acc + t.queue.length, 0),
+            blockedPartitionKeys: this._processing.size,
+            trackedPartitionKeys: this._queues.size,
+            availableProcessors: this._processors.filter(t => !t.isBusy).length
+        };
+    }
 
 
     public constructor(processors: ReadonlyArray<Processor>)
@@ -33,7 +45,8 @@ export class DefaultScheduler implements Scheduler
 
         const workItem: WorkItem = {
             ...routedEvent,
-            deferred
+            deferred,
+            enqueuedAt: Date.now()
         };
 
         if (this._queues.has(workItem.partitionKey))

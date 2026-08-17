@@ -13,8 +13,6 @@ import { GrpcClientFactory } from "./grpc-client-factory.js";
 import { GrpcProxyProcessor } from "./grpc-proxy-processor.js";
 import { Monitor } from "./monitor.js";
 import { RpcProxyProcessor } from "./rpc-proxy-processor.js";
-// import { ConsumerProfiler } from "./consumer-profiler";
-// import { ProfilingConsumer } from "./profiling-consumer";
 // public
 let RedisEventSubMgr = (() => {
     let _classDecorators = [inject("EdaRedisClient", "Logger")];
@@ -51,8 +49,6 @@ let RedisEventSubMgr = (() => {
                 throw new ObjectDisposedException(this);
             given(this, "this").ensure(t => !t._manager, "already initialized");
             this._manager = manager;
-            // if (this._manager.metricsEnabled)
-            //     ConsumerProfiler.initialize();
         }
         async consume() {
             if (this._isDisposed)
@@ -83,7 +79,7 @@ let RedisEventSubMgr = (() => {
                     }
                     else
                         processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
-                    const broker = new Broker(topic, consumers, processors);
+                    const broker = new Broker(topic, this._manager.consumerGroupId ?? "UNKNOWN", consumers, processors);
                     this._brokers.push(broker);
                     monitorConsumers.push(...consumers);
                     // const monitor = new Monitor(this._client, consumers, this._logger);
@@ -111,11 +107,6 @@ let RedisEventSubMgr = (() => {
                     this._isDisposed = true;
                     console.warn("EventSubMgr disposed");
                 });
-                // if (this._manager.metricsEnabled)
-                // {
-                //     await Delay.seconds(3);
-                //     ConsumerProfiler.aggregate(this._manager.consumerName, this._consumers.map(t => (<ProfilingConsumer>t).profiler));
-                // }
             }
             return this._disposePromise;
         }

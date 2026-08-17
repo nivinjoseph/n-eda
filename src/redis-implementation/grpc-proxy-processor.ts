@@ -24,7 +24,7 @@ export class GrpcProxyProcessor extends Processor
 
     protected async processEvent(workItem: WorkItem): Promise<void>
     {
-        const response = await this._grpcClient.process(workItem);
+        const response = await this.timeProxyHop("grpc", workItem, () => this._grpcClient.process(workItem));
 
         const { eventName, eventId } = response;
 

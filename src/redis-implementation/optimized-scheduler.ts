@@ -5,6 +5,7 @@ import { RoutedEvent } from "./broker.js";
 import { Processor } from "./processor.js";
 import { Queue } from "./queue.js";
 import { Scheduler, WorkItem } from "./scheduler.js";
+import { SchedulerMetrics } from "../metrics.js";
 
 
 export class OptimizedScheduler implements Scheduler
@@ -17,6 +18,17 @@ export class OptimizedScheduler implements Scheduler
     private readonly _cleanupDuration = Duration.fromHours(1).toMilliSeconds();
     private _cleanupTime = Date.now() + this._cleanupDuration;
     private _isDisposed = false;
+
+
+    public get metrics(): SchedulerMetrics
+    {
+        return {
+            queueDepth: this._partitionQueue.length,
+            blockedPartitionKeys: this._processing.size,
+            trackedPartitionKeys: this._queues.size,
+            availableProcessors: this._processors.length
+        };
+    }
 
 
     public constructor(processors: ReadonlyArray<Processor>)
@@ -46,7 +58,8 @@ export class OptimizedScheduler implements Scheduler
 
         const workItem: WorkItem = {
             ...routedEvent,
-            deferred
+            deferred,
+            enqueuedAt: Date.now()
         };
 
         const queue = this._queues.get(workItem.partitionKey);

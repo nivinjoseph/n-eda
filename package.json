@@ -36,6 +36,7 @@
     "homepage": "https://github.com/nivinjoseph/n-eda#readme",
     "devDependencies": {
         "@eslint/js": "10.0.1",
+        "@opentelemetry/sdk-metrics": "2.7.1",
         "@stylistic/eslint-plugin": "5.10.0",
         "@types/murmurhash3js": "3.0.7",
         "@types/node": "24.10",

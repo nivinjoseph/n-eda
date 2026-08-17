@@ -7,6 +7,14 @@ export class DefaultScheduler {
     _queues = new Map();
     _processing = new Set();
     _processors;
+    get metrics() {
+        return {
+            queueDepth: [...this._queues.values()].reduce((acc, t) => acc + t.queue.length, 0),
+            blockedPartitionKeys: this._processing.size,
+            trackedPartitionKeys: this._queues.size,
+            availableProcessors: this._processors.filter(t => !t.isBusy).length
+        };
+    }
     constructor(processors) {
         given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._processors = processors;
@@ -19,7 +27,8 @@ export class DefaultScheduler {
         const deferred = new Deferred();
         const workItem = {
             ...routedEvent,
-            deferred
+            deferred,
+            enqueuedAt: Date.now()
         };
         if (this._queues.has(workItem.partitionKey))
             this._queues.get(workItem.partitionKey).queue.unshift(workItem);

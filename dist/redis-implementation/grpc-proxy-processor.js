@@ -11,7 +11,7 @@ export class GrpcProxyProcessor extends Processor {
         this._grpcClient = grpcClientFactory.create();
     }
     async processEvent(workItem) {
-        const response = await this._grpcClient.process(workItem);
+        const response = await this.timeProxyHop("grpc", workItem, () => this._grpcClient.process(workItem));
         const { eventName, eventId } = response;
         if (eventName !== workItem.eventName || eventId !== workItem.eventId)
             throw new ApplicationException(

@@ -7,6 +7,8 @@ import { ConfigurationManager } from "@nivinjoseph/n-config";
 import { inject } from "@nivinjoseph/n-ject";
 import { Delay } from "@nivinjoseph/n-util";
 import { EventRegistration } from "../event-registration.js";
+import { instruments, MESSAGING_SYSTEM, timeRedisCommand } from "../metrics.js";
+import { ATTR_MESSAGING_SYSTEM } from "@opentelemetry/semantic-conventions/incubating";
 import { NedaClearTrackedKeysEvent } from "./neda-clear-tracked-keys-event.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 import { Producer } from "./producer.js";
@@ -105,9 +107,18 @@ let RedisEventBus = (() => {
                     const observableId = event.refId;
                     const observableEventType = event.name;
                     const observableKey = this._generateObservableKey({ observableType, observableId, observableEventType });
+                    // Two serial Redis round trips per event, awaited inside this loop. Measured
+                    // so the cost of pipelining them can be judged rather than guessed at.
+                    const lookupStartedAt = performance.now();
                     const hasSubs = await this._checkForSubscribers(observableKey);
+                    const subs = hasSubs ? await this._fetchSubscribers(observableKey) : [];
+                    instruments().observerLookupDuration.record((performance.now() - lookupStartedAt) / 1000, {
+                        [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM
+                    });
+                    instruments().observerSubscribers.record(subs.length, {
+                        [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM
+                    });
                     if (hasSubs) {
-                        const subs = await this._fetchSubscribers(observableKey);
                         if (subs.isNotEmpty) {
                             for (const sub of subs) {
                                 const [observerTypeName, observerId] = sub.split(".");
@@ -174,7 +185,7 @@ let RedisEventBus = (() => {
                 const observationKey = EventRegistration.generateObservationKey(observerTypeName, observableType, observableEventType);
                 if (!this._manager.observerEventMap.has(observationKey))
                     throw new ApplicationException(`No handler registered for observation key '${observationKey}'`);
-                promises.push(new Promise((resolve, reject) => {
+                promises.push(timeRedisCommand("SADD", "event-bus", () => new Promise((resolve, reject) => {
                     this._client.sadd(observableKey, observerKey, (err) => {
                         if (err) {
                             reject(err);
@@ -182,7 +193,7 @@ let RedisEventBus = (() => {
                         }
                         resolve();
                     }).catch(e => reject(e));
-                }));
+                })));
             }
             await Promise.all(promises);
         }
@@ -198,7 +209,7 @@ let RedisEventBus = (() => {
             const promises = new Array();
             for (const watch of watches) {
                 const observableKey = this._generateObservableKey(watch);
-                promises.push(new Promise((resolve, reject) => {
+                promises.push(timeRedisCommand("SREM", "event-bus", () => new Promise((resolve, reject) => {
                     this._client.srem(observableKey, observerKey, (err) => {
                         if (err) {
                             reject(err);
@@ -206,7 +217,7 @@ let RedisEventBus = (() => {
                         }
                         resolve();
                     }).catch(e => reject(e));
-                }));
+                })));
             }
             await Promise.all(promises);
         }
@@ -239,7 +250,7 @@ let RedisEventBus = (() => {
             return `${observerTypeName}.${observerId}`;
         }
         _checkForSubscribers(key) {
-            return new Promise((resolve, reject) => {
+            return timeRedisCommand("SCARD", "event-bus", () => new Promise((resolve, reject) => {
                 this._client.scard(key, (err, val) => {
                     if (err) {
                         reject(err);
@@ -247,10 +258,10 @@ let RedisEventBus = (() => {
                     }
                     resolve(val > 0);
                 }).catch(e => reject(e));
-            });
+            }));
         }
         _fetchSubscribers(key) {
-            return new Promise((resolve, reject) => {
+            return timeRedisCommand("SMEMBERS", "event-bus", () => new Promise((resolve, reject) => {
                 this._client.smembers(key, (err, val) => {
                     if (err) {
                         reject(err);
@@ -258,7 +269,7 @@ let RedisEventBus = (() => {
                     }
                     resolve(val ?? []);
                 }).catch(e => reject(e));
-            });
+            }));
         }
     };
     return RedisEventBus = _classThis;

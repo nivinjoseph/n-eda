@@ -10,6 +10,8 @@ import { Logger } from "@nivinjoseph/n-log";
 import { Delay } from "@nivinjoseph/n-util";
 import { Redis } from "ioredis";
 import { EventRegistration } from "../event-registration.js";
+import { instruments, MESSAGING_SYSTEM, timeRedisCommand } from "../metrics.js";
+import { ATTR_MESSAGING_SYSTEM } from "@opentelemetry/semantic-conventions/incubating";
 import { NedaClearTrackedKeysEvent } from "./neda-clear-tracked-keys-event.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 import { Producer } from "./producer.js";
@@ -142,11 +144,20 @@ export class RedisEventBus implements EventBus
 
                 const observableKey = this._generateObservableKey({ observableType, observableId, observableEventType });
 
+                // Two serial Redis round trips per event, awaited inside this loop. Measured
+                // so the cost of pipelining them can be judged rather than guessed at.
+                const lookupStartedAt = performance.now();
                 const hasSubs = await this._checkForSubscribers(observableKey);
+                const subs = hasSubs ? await this._fetchSubscribers(observableKey) : [];
+                instruments().observerLookupDuration.record((performance.now() - lookupStartedAt) / 1000, {
+                    [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM
+                });
+                instruments().observerSubscribers.record(subs.length, {
+                    [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM
+                });
+
                 if (hasSubs)
                 {
-                    const subs = await this._fetchSubscribers(observableKey);
-
                     if (subs.isNotEmpty)
                     {
                         for (const sub of subs)
@@ -239,7 +250,7 @@ export class RedisEventBus implements EventBus
             if (!this._manager.observerEventMap.has(observationKey))
                 throw new ApplicationException(`No handler registered for observation key '${observationKey}'`);
 
-            promises.push(new Promise<void>((resolve, reject) =>
+            promises.push(timeRedisCommand("SADD", "event-bus", () => new Promise<void>((resolve, reject) =>
             {
                 this._client.sadd(observableKey, observerKey, (err) =>
                 {
@@ -251,7 +262,7 @@ export class RedisEventBus implements EventBus
 
                     resolve();
                 }).catch(e => reject(e));
-            }));
+            })));
         }
 
         await Promise.all(promises);
@@ -276,7 +287,7 @@ export class RedisEventBus implements EventBus
         {
             const observableKey = this._generateObservableKey(watch);
 
-            promises.push(new Promise<void>((resolve, reject) =>
+            promises.push(timeRedisCommand("SREM", "event-bus", () => new Promise<void>((resolve, reject) =>
             {
                 this._client.srem(observableKey, observerKey, (err) =>
                 {
@@ -288,7 +299,7 @@ export class RedisEventBus implements EventBus
 
                     resolve();
                 }).catch(e => reject(e));
-            }));
+            })));
         }
 
         await Promise.all(promises);
@@ -338,7 +349,7 @@ export class RedisEventBus implements EventBus
 
     private _checkForSubscribers(key: string): Promise<boolean>
     {
-        return new Promise((resolve, reject) =>
+        return timeRedisCommand("SCARD", "event-bus", () => new Promise<boolean>((resolve, reject) =>
         {
             this._client.scard(key, (err, val) =>
             {
@@ -350,12 +361,12 @@ export class RedisEventBus implements EventBus
 
                 resolve(val! > 0);
             }).catch(e => reject(e));
-        });
+        }));
     }
 
     private _fetchSubscribers(key: string): Promise<Array<string>>
     {
-        return new Promise((resolve, reject) =>
+        return timeRedisCommand("SMEMBERS", "event-bus", () => new Promise<Array<string>>((resolve, reject) =>
         {
             this._client.smembers(key, (err, val) =>
             {
@@ -367,6 +378,6 @@ export class RedisEventBus implements EventBus
 
                 resolve(val ?? []);
             }).catch(e => reject(e));
-        });
+        }));
     }
 }

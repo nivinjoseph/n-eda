@@ -22,7 +22,7 @@ export class RpcProxyProcessor extends Processor
 
     protected async processEvent(workItem: WorkItem): Promise<void>
     {
-        const response = await this._invokeRPC(workItem);
+        const response = await this.timeProxyHop("rpc", workItem, () => this._invokeRPC(workItem));
 
         const body: any = response.headers.get("content-type")?.includes("application/json")
             ? await response.json().catch(() => null)

@@ -3,18 +3,30 @@ import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 // import { DefaultScheduler } from "./default-scheduler.js";
 import { OptimizedScheduler } from "./optimized-scheduler.js";
 import { Topic } from "../topic.js";
+import { registerPartitionMetricsSource, unregisterPartitionMetricsSource } from "../metrics.js";
 export class Broker {
     _topic;
+    _consumerGroupId;
     _consumers;
     _processors;
     _scheduler;
     _metricsTracker = new Map;
     _isDisposed = false;
     get topic() { return this._topic; }
-    get metrics() { return this._metricsTracker; }
-    constructor(topic, consumers, processors) {
+    get topicName() { return this._topic.name; }
+    get consumerGroupId() { return this._consumerGroupId; }
+    get partitionMetrics() { return this._metricsTracker; }
+    get schedulerMetrics() { return this._scheduler.metrics; }
+    get trackedKeyCounts() {
+        const counts = new Map();
+        this._consumers.forEach(t => counts.set(t.partition, t.trackedKeyCount));
+        return counts;
+    }
+    constructor(topic, consumerGroupId, consumers, processors) {
         given(topic, "topic").ensureHasValue().ensureIsType(Topic);
         this._topic = topic;
+        given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
+        this._consumerGroupId = consumerGroupId;
         given(consumers, "consumers").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._consumers = consumers;
         given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty)
@@ -23,6 +35,7 @@ export class Broker {
         this._scheduler = new OptimizedScheduler(processors);
     }
     initialize() {
+        registerPartitionMetricsSource(this);
         this._consumers.forEach(t => t.registerBroker(this));
         this._consumers.forEach(t => t.consume());
     }
@@ -31,22 +44,27 @@ export class Broker {
             return Promise.reject(new ObjectDisposedException("Broker"));
         return this._scheduler.scheduleWork(routedEvent);
     }
-    report(partition, writeIndex, readIndex) {
-        const lag = writeIndex - readIndex;
-        const last = this._metricsTracker.get(partition);
-        let lastWriteIndex = writeIndex;
-        let lastReadIndex = readIndex;
-        if (last != null) {
-            lastWriteIndex = last.writeIndex;
-            lastReadIndex = last.readIndex;
+    /**
+     * Called on every consumer poll tick. Deliberately mutates in place rather than
+     * allocating, and stores only the raw indexes -- lag and rates are derived at
+     * collection time (or by the metrics backend) rather than computed here, because the
+     * interval between calls is variable and unknowable from this side.
+     */
+    report(partition, writeIndex, readIndex, polledAt) {
+        const existing = this._metricsTracker.get(partition);
+        if (existing != null) {
+            existing.writeIndex = writeIndex;
+            existing.readIndex = readIndex;
+            existing.lastPolledAt = polledAt;
         }
-        this._metricsTracker.set(partition, {
-            lag, writeIndex, readIndex,
-            productionRate: writeIndex - lastWriteIndex,
-            consumptionRate: readIndex - lastReadIndex
-        });
+        else
+            this._metricsTracker.set(partition, { writeIndex, readIndex, lastPolledAt: polledAt });
     }
     async dispose() {
+        // Must happen before anything that can throw. The catch below would otherwise
+        // swallow the failure and leave this broker in the registry forever, reporting
+        // frozen stale lag.
+        unregisterPartitionMetricsSource(this);
         // console.warn("Disposing broker");
         this._isDisposed = true;
         await Promise.all([

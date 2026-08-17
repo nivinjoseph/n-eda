@@ -10,6 +10,14 @@ export class OptimizedScheduler {
     _cleanupDuration = Duration.fromHours(1).toMilliSeconds();
     _cleanupTime = Date.now() + this._cleanupDuration;
     _isDisposed = false;
+    get metrics() {
+        return {
+            queueDepth: this._partitionQueue.length,
+            blockedPartitionKeys: this._processing.size,
+            trackedPartitionKeys: this._queues.size,
+            availableProcessors: this._processors.length
+        };
+    }
     constructor(processors) {
         given(processors, "processors").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         processors.forEach(t => {
@@ -27,7 +35,8 @@ export class OptimizedScheduler {
         const deferred = new Deferred();
         const workItem = {
             ...routedEvent,
-            deferred
+            deferred,
+            enqueuedAt: Date.now()
         };
         const queue = this._queues.get(workItem.partitionKey);
         if (queue)

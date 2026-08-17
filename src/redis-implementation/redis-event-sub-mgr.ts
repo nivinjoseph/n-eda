@@ -18,8 +18,6 @@ import { Monitor } from "./monitor.js";
 import { Processor } from "./processor.js";
 import { RpcProxyProcessor } from "./rpc-proxy-processor.js";
 import { DefaultEdaContext } from "../eda-context.js";
-// import { ConsumerProfiler } from "./consumer-profiler";
-// import { ProfilingConsumer } from "./profiling-consumer";
 
 // public
 @inject("EdaRedisClient", "Logger")
@@ -57,8 +55,6 @@ export class RedisEventSubMgr implements EventSubMgr
         given(this, "this").ensure(t => !t._manager, "already initialized");
 
         this._manager = manager;
-        // if (this._manager.metricsEnabled)
-        //     ConsumerProfiler.initialize();
     }
 
     public async consume(): Promise<void>
@@ -103,7 +99,7 @@ export class RedisEventSubMgr implements EventSubMgr
                 else
                     processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
 
-                const broker = new Broker(topic, consumers, processors);
+                const broker = new Broker(topic, this._manager.consumerGroupId ?? "UNKNOWN", consumers, processors);
                 this._brokers.push(broker);
 
                 monitorConsumers.push(...consumers);
@@ -140,13 +136,6 @@ export class RedisEventSubMgr implements EventSubMgr
                     this._isDisposed = true;
                     console.warn("EventSubMgr disposed");
                 }) as unknown as Promise<void>;
-
-            // if (this._manager.metricsEnabled)
-            // {
-            //     await Delay.seconds(3);
-
-            //     ConsumerProfiler.aggregate(this._manager.consumerName, this._consumers.map(t => (<ProfilingConsumer>t).profiler));
-            // }
         }
 
         return this._disposePromise!;

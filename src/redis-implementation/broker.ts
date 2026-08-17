@@ -9,28 +9,51 @@ import { Consumer } from "./consumer.js";
 import { OptimizedScheduler } from "./optimized-scheduler.js";
 import { Processor } from "./processor.js";
 import { Scheduler } from "./scheduler.js";
-import { Topic, TopicPartitionMetrics } from "../topic.js";
+import { Topic } from "../topic.js";
+import {
+    PartitionIndexes,
+    PartitionMetricsSource,
+    registerPartitionMetricsSource,
+    SchedulerMetrics,
+    unregisterPartitionMetricsSource
+} from "../metrics.js";
 
 
-export class Broker implements Disposable
+export class Broker implements Disposable, PartitionMetricsSource
 {
     private readonly _topic: Topic;
+    private readonly _consumerGroupId: string;
     private readonly _consumers: ReadonlyArray<Consumer>;
     private readonly _processors: ReadonlyArray<Processor>;
     private readonly _scheduler: Scheduler;
-    private readonly _metricsTracker = new Map<number, TopicPartitionMetrics>;
+    private readonly _metricsTracker = new Map<number, PartitionIndexes>;
     private _isDisposed = false;
-    
-    
+
+
     public get topic(): Topic { return this._topic; }
-    public get metrics(): ReadonlyMap<number, TopicPartitionMetrics> { return this._metricsTracker; }
+    public get topicName(): string { return this._topic.name; }
+    public get consumerGroupId(): string { return this._consumerGroupId; }
+    public get partitionMetrics(): ReadonlyMap<number, PartitionIndexes> { return this._metricsTracker; }
+    public get schedulerMetrics(): SchedulerMetrics { return this._scheduler.metrics; }
+
+    public get trackedKeyCounts(): ReadonlyMap<number, number>
+    {
+        const counts = new Map<number, number>();
+        this._consumers.forEach(t => counts.set(t.partition, t.trackedKeyCount));
+
+        return counts;
+    }
 
 
-    public constructor(topic: Topic, consumers: ReadonlyArray<Consumer>, processors: ReadonlyArray<Processor>)
+    public constructor(topic: Topic, consumerGroupId: string, consumers: ReadonlyArray<Consumer>,
+        processors: ReadonlyArray<Processor>)
     {
         given(topic, "topic").ensureHasValue().ensureIsType(Topic);
         this._topic = topic;
-        
+
+        given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
+        this._consumerGroupId = consumerGroupId;
+
         given(consumers, "consumers").ensureHasValue().ensureIsArray().ensure(t => t.isNotEmpty);
         this._consumers = consumers;
 
@@ -44,6 +67,8 @@ export class Broker implements Disposable
 
     public initialize(): void
     {
+        registerPartitionMetricsSource(this);
+
         this._consumers.forEach(t => t.registerBroker(this));
         this._consumers.forEach(t => t.consume());
     }
@@ -56,28 +81,33 @@ export class Broker implements Disposable
         return this._scheduler.scheduleWork(routedEvent);
     }
     
-    public report(partition: number, writeIndex: number, readIndex: number): void
+    /**
+     * Called on every consumer poll tick. Deliberately mutates in place rather than
+     * allocating, and stores only the raw indexes -- lag and rates are derived at
+     * collection time (or by the metrics backend) rather than computed here, because the
+     * interval between calls is variable and unknowable from this side.
+     */
+    public report(partition: number, writeIndex: number, readIndex: number, polledAt: number): void
     {
-        const lag = writeIndex - readIndex;
-        
-        const last = this._metricsTracker.get(partition);
-        let lastWriteIndex = writeIndex;
-        let lastReadIndex = readIndex;
-        if (last != null)
+        const existing = this._metricsTracker.get(partition);
+
+        if (existing != null)
         {
-            lastWriteIndex = last.writeIndex;
-            lastReadIndex = last.readIndex;
+            existing.writeIndex = writeIndex;
+            existing.readIndex = readIndex;
+            existing.lastPolledAt = polledAt;
         }
-        
-        this._metricsTracker.set(partition, {
-            lag, writeIndex, readIndex,
-            productionRate: writeIndex - lastWriteIndex,
-            consumptionRate: readIndex - lastReadIndex
-        });
+        else
+            this._metricsTracker.set(partition, { writeIndex, readIndex, lastPolledAt: polledAt });
     }
 
     public async dispose(): Promise<void>
     {
+        // Must happen before anything that can throw. The catch below would otherwise
+        // swallow the failure and leave this broker in the registry forever, reporting
+        // frozen stale lag.
+        unregisterPartitionMetricsSource(this);
+
         // console.warn("Disposing broker");
         this._isDisposed = true;
         await Promise.all([

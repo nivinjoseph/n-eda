@@ -91,12 +91,3 @@ export class Topic
         return this;
     }
 }
-
-export interface TopicPartitionMetrics
-{
-    lag: number;
-    writeIndex: number;
-    readIndex: number;
-    productionRate: number;
-    consumptionRate: number;
-}

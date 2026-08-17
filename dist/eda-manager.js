@@ -8,7 +8,6 @@ import { AwsLambdaEventHandler } from "./redis-implementation/aws-lambda-event-h
 import { RpcEventHandler } from "./redis-implementation/rpc-event-handler.js";
 import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
 import { DefaultEdaContext } from "./eda-context.js";
-// import { ConsumerTracer } from "./event-handler-tracer";
 // public
 export class EdaManager {
     _container;
@@ -18,7 +17,6 @@ export class EdaManager {
     _eventMap;
     _observerEventMap;
     // private readonly _wildKeys: Array<string>;
-    // private _metricsEnabled = false;
     _partitionKeyMapper = null;
     _eventBusRegistered = false;
     _eventSubMgrRegistered = false;
@@ -27,7 +25,6 @@ export class EdaManager {
     _consumerGroupId = null;
     _cleanKeys = false;
     _distributedObserverTopic = null;
-    // private _consumerTracer: ConsumerTracer | null = null;
     _awsLambdaDetails = null;
     _isAwsLambdaConsumer = false;
     _awsLambdaEventHandler = null;
@@ -51,7 +48,6 @@ export class EdaManager {
     get consumerName() { return this._consumerName; }
     get consumerGroupId() { return this._consumerGroupId; }
     get cleanKeys() { return this._cleanKeys; }
-    // public get consumerTracer(): ConsumerTracer | null { return this._consumerTracer; }
     get awsLambdaDetails() { return this._awsLambdaDetails; }
     get awsLambdaProxyEnabled() { return this._awsLambdaDetails != null; }
     get isAwsLambdaConsumer() { return this._isAwsLambdaConsumer; }
@@ -62,7 +58,6 @@ export class EdaManager {
     get grpcProxyEnabled() { return this._grpcDetails != null; }
     get isGrpcConsumer() { return this._isGrpcConsumer; }
     get partitionKeyMapper() { return this._partitionKeyMapper; }
-    // public get metricsEnabled(): boolean { return this._metricsEnabled; }
     constructor(container) {
         given(container, "container").ensureIsObject().ensureIsType(Container);
         if (container == null) {
@@ -103,12 +98,6 @@ export class EdaManager {
         }
         return this;
     }
-    // public enableMetrics(): this
-    // {
-    //     given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
-    //     this._metricsEnabled = true;
-    //     return this;
-    // }
     usePartitionKeyMapper(func) {
         given(func, "func").ensureHasValue().ensureIsFunction();
         given(this, "this")
@@ -140,15 +129,6 @@ export class EdaManager {
         }
         return this;
     }
-    // public registerConsumerTracer(tracer: ConsumerTracer): this
-    // {
-    //     given(tracer, "tracer").ensureHasValue().ensureIsFunction();
-    //     given(this, "this")
-    //         .ensure(t => !t._isBootstrapped, "invoking method after bootstrap")
-    //         .ensure(t => !t._consumerTracer, "consumer tracer already set");
-    //     this._consumerTracer = tracer;
-    //     return this;
-    // }
     registerEventBus(eventBus) {
         given(eventBus, "eventBus").ensureHasValue();
         given(this, "this")

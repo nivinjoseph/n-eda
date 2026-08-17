@@ -17,7 +17,7 @@ export class AwsLambdaProxyProcessor extends Processor {
         });
     }
     async processEvent(workItem) {
-        const response = await this._invokeLambda(workItem);
+        const response = await this.timeProxyHop("aws-lambda", workItem, () => this._invokeLambda(workItem));
         const result = response.Payload ? JSON.parse(response.Payload.transformToString()) : null;
         if (result != null && result.error)
             throw new ApplicationException("Error during invocation of AWS Lambda.", result.error);

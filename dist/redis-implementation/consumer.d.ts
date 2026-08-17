@@ -13,6 +13,12 @@ export declare class Consumer implements Disposable {
     private readonly _partition;
     private readonly _cleanKeys;
     private readonly _flush;
+    /**
+     * Built once. Deliberately carries neither the partition nor the event name: partition
+     * level throughput is already served exactly by the `n_eda.partition.*` observables,
+     * and event name belongs only on counters, never on histograms.
+     */
+    private readonly _metricAttributes;
     private _isDisposed;
     private readonly _maxTrackedSize;
     private readonly _keepTrackedSize;
@@ -22,12 +28,13 @@ export declare class Consumer implements Disposable {
     private _consumePromise;
     private _broker;
     private _delayCanceller;
-    private _lastReportTime;
     private get _writeIndexKey();
     private get _readIndexKey();
     private get _trackedKeysKey();
     private get _fullId();
     get id(): string;
+    get partition(): number;
+    get trackedKeyCount(): number;
     constructor(client: Redis, manager: EdaManager, topic: string, partition: number, flush?: boolean);
     registerBroker(broker: Broker): void;
     consume(): void;

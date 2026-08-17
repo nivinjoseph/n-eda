@@ -3,24 +3,34 @@ import { ApplicationException, Exception, InvalidOperationException, ObjectDispo
 import { Logger } from "@nivinjoseph/n-log";
 import { Delay, DelayCanceller, Disposable, Observable, Observer } from "@nivinjoseph/n-util";
 import { EdaManager } from "../eda-manager.js";
-// import { ConsumerTracer } from "../event-handler-tracer";
 import * as otelApi from "@opentelemetry/api";
 import {
     ATTR_MESSAGING_SYSTEM,
+    ATTR_MESSAGING_CONSUMER_GROUP_NAME,
+    ATTR_MESSAGING_OPERATION_NAME,
     ATTR_MESSAGING_OPERATION_TYPE,
     ATTR_MESSAGING_DESTINATION_NAME,
     ATTR_MESSAGING_DESTINATION_TEMPORARY,
     ATTR_MESSAGING_MESSAGE_ID,
     ATTR_MESSAGING_MESSAGE_CONVERSATION_ID
 } from "@opentelemetry/semantic-conventions/incubating";
+import { ATTR_ERROR_TYPE } from "@opentelemetry/semantic-conventions";
+import {
+    ATTR_NEDA_DROP_REASON,
+    ATTR_NEDA_EVENT_NAME,
+    ATTR_NEDA_OUTCOME,
+    ATTR_NEDA_PROXY_KIND,
+    errorTypeOf,
+    instruments,
+    MESSAGING_SYSTEM,
+    NedaProxyKind
+} from "../metrics.js";
 import { WorkItem } from "./scheduler.js";
 
 
 export abstract class Processor implements Disposable
 {
     private readonly _manager: EdaManager;
-    // private readonly _consumerTracer: ConsumerTracer | null;
-    // private readonly _hasConsumerTracer: boolean;
     private readonly _logger: Logger;
     private readonly _availabilityObserver = new Observer<this>("available");
     private readonly _doneProcessingObserver = new Observer<WorkItem>("done-processing");
@@ -48,9 +58,6 @@ export abstract class Processor implements Disposable
     {
         given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
         this._manager = manager;
-
-        // this._consumerTracer = this._manager.consumerTracer;
-        // this._hasConsumerTracer = this._consumerTracer != null;
 
         this._logger = this._manager.serviceLocator.resolve<Logger>("Logger");
     }
@@ -103,6 +110,39 @@ export abstract class Processor implements Disposable
 
     protected abstract processEvent(workItem: WorkItem): Promise<void>;
 
+    /**
+     * Times the remote hop taken by the proxy processors, which otherwise have no visibility
+     * at all. Shared here so the three of them cannot drift on attributes.
+     */
+    protected async timeProxyHop<T>(kind: NedaProxyKind, workItem: WorkItem, exec: () => Promise<T>): Promise<T>
+    {
+        const startedAt = performance.now();
+        let errorType: string | null = null;
+
+        try
+        {
+            return await exec();
+        }
+        catch (error: any)
+        {
+            errorType = errorTypeOf(error);
+            throw error;
+        }
+        finally
+        {
+            const attributes: otelApi.Attributes = {
+                [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+                [ATTR_MESSAGING_DESTINATION_NAME]: workItem.topic,
+                [ATTR_NEDA_PROXY_KIND]: kind
+            };
+
+            if (errorType !== null)
+                attributes[ATTR_ERROR_TYPE] = errorType;
+
+            instruments().proxyDuration.record((performance.now() - startedAt) / 1000, attributes);
+        }
+    }
+
     private async _process(): Promise<void>
     {
         const workItem = this._currentWorkItem!;
@@ -124,46 +164,67 @@ export abstract class Processor implements Disposable
         
         // otelApi.trace.setSpan(otelApi.context.active(), span);
         
+        // Bare topic name plus consumer group, and no event name or partition: this is a
+        // histogram, so every extra attribute is multiplied by the bucket count. Per event
+        // type latency is what the `event.X process` span above is for.
+        const metricAttributes: otelApi.Attributes = {
+            [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+            [ATTR_MESSAGING_OPERATION_NAME]: "process",
+            [ATTR_MESSAGING_DESTINATION_NAME]: workItem.topic,
+            [ATTR_MESSAGING_CONSUMER_GROUP_NAME]: this._manager.consumerGroupId ?? "UNKNOWN"
+        };
+        const eventMetricAttributes: otelApi.Attributes = {
+            ...metricAttributes,
+            [ATTR_NEDA_EVENT_NAME]: workItem.eventName
+        };
+
+        // Work is serialized per partition key, so a sustained wait here means head-of-line
+        // blocking rather than a shortage of processors.
+        instruments().schedulerWaitDuration
+            .record((Date.now() - workItem.enqueuedAt) / 1000, metricAttributes);
+
         await otelApi.context.with(otelApi.trace.setSpan(otelApi.context.active(), span), async () =>
-        { 
+        {
             const maxProcessAttempts = 10;
             let numProcessAttempts = 0;
-            try 
+            const processStartedAt = performance.now();
+            let terminalErrorType: string | null = null;
+            let wasDisposed = false;
+            try
             {
                 while (numProcessAttempts < maxProcessAttempts)
                 {
                     if (this._isDisposed)
                     {
+                        wasDisposed = true;
                         workItem.deferred.reject(new ObjectDisposedException("Processor"));
                         return;
                     }
 
                     numProcessAttempts++;
+                    const handlerStartedAt = performance.now();
 
-                    try 
+                    try
                     {
-                        // await this._logger.logInfo(`Processing event ${workItem.eventName} with id ${workItem.eventId}`);
-
-                        // if (this._hasConsumerTracer)
-                        //     await this._consumerTracer!({
-                        //         topic: workItem.topic,
-                        //         partition: workItem.partition,
-                        //         partitionKey: workItem.partitionKey,
-                        //         eventName: workItem.eventName,
-                        //         eventId: workItem.eventId
-                        //     }, () => this.processEvent(workItem));
-                        // else
-                        //     await this.processEvent(workItem);
-
                         await this.processEvent(workItem);
+
+                        instruments().handlerDuration
+                            .record((performance.now() - handlerStartedAt) / 1000, metricAttributes);
+                        instruments().processAttempts
+                            .add(1, { ...eventMetricAttributes, [ATTR_NEDA_OUTCOME]: "success" });
+
                         workItem.deferred.resolve();
                         return;
                     }
                     catch (error: any)
                     {
+                        instruments().handlerDuration.record((performance.now() - handlerStartedAt) / 1000,
+                            { ...metricAttributes, [ATTR_ERROR_TYPE]: errorTypeOf(error) });
+
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                         if (this._isDisposed)
                         {
+                            wasDisposed = true;
                             workItem.deferred.reject(new ObjectDisposedException("Processor"));
                             return;
                         }
@@ -181,6 +242,12 @@ export abstract class Processor implements Disposable
                             throw error;
                         else
                         {
+                            instruments().processAttempts.add(1, {
+                                ...eventMetricAttributes,
+                                [ATTR_NEDA_OUTCOME]: "retry",
+                                [ATTR_ERROR_TYPE]: errorTypeOf(error)
+                            });
+
                             span.recordException(error as Error);
                             const seconds = (5 + numProcessAttempts) * numProcessAttempts; // [6, 14, 24, 36, 50, 66, 84, 104, 126]
                             span.addEvent("Waiting before retry", {
@@ -196,6 +263,23 @@ export abstract class Processor implements Disposable
             }
             catch (error: any)
             {
+                terminalErrorType = errorTypeOf(error);
+
+                instruments().processAttempts.add(1, {
+                    ...eventMetricAttributes,
+                    [ATTR_NEDA_OUTCOME]: "exhausted",
+                    [ATTR_ERROR_TYPE]: terminalErrorType
+                });
+
+                // There is no dead letter queue. The consumer swallows this rejection, marks
+                // the event as tracked and advances the read index, so this counter is the
+                // only signal that the event is permanently gone.
+                instruments().eventDropped.add(1, {
+                    ...eventMetricAttributes,
+                    [ATTR_NEDA_DROP_REASON]: "process_failed",
+                    [ATTR_ERROR_TYPE]: terminalErrorType
+                });
+
                 span.recordException(error as Error);
                 span.addEvent(`Failed to process event of type '${workItem.eventName}'`, {
                     eventData: JSON.stringify(workItem.event.serialize())
@@ -211,8 +295,18 @@ export abstract class Processor implements Disposable
             }
             finally
             {
+                // Skipped when disposed: the event was neither processed nor dropped, it will
+                // be re-read after restart, so recording it here would double count.
+                if (!wasDisposed)
+                {
+                    instruments().processDuration.record((performance.now() - processStartedAt) / 1000,
+                        terminalErrorType !== null
+                            ? { ...metricAttributes, [ATTR_ERROR_TYPE]: terminalErrorType }
+                            : metricAttributes);
+                }
+
                 span.end();
-            } 
+            }
         });
     }
 }

@@ -9,7 +9,7 @@ export class RpcProxyProcessor extends Processor {
         this._baseUrl = `http://${manager.rpcDetails.host}:${manager.rpcDetails.port}`;
     }
     async processEvent(workItem) {
-        const response = await this._invokeRPC(workItem);
+        const response = await this.timeProxyHop("rpc", workItem, () => this._invokeRPC(workItem));
         const body = response.headers.get("content-type")?.includes("application/json")
             ? await response.json().catch(() => null)
             : null;

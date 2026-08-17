@@ -27,11 +27,4 @@ export declare class Topic {
     configurePartitionAffinity(partitionAffinity: `${number}-${number}`): Topic;
     disable(): Topic;
 }
-export interface TopicPartitionMetrics {
-    lag: number;
-    writeIndex: number;
-    readIndex: number;
-    productionRate: number;
-    consumptionRate: number;
-}
 //# sourceMappingURL=topic.d.ts.map

@@ -11,12 +11,23 @@ import { EdaEvent } from "../eda-event.js";
 import * as otelApi from "@opentelemetry/api";
 import {
     ATTR_MESSAGING_SYSTEM,
+    ATTR_MESSAGING_OPERATION_NAME,
     ATTR_MESSAGING_OPERATION_TYPE,
     ATTR_MESSAGING_DESTINATION_NAME,
     ATTR_MESSAGING_DESTINATION_TEMPORARY,
     ATTR_MESSAGING_MESSAGE_ID,
     ATTR_MESSAGING_MESSAGE_CONVERSATION_ID
 } from "@opentelemetry/semantic-conventions/incubating";
+import { ATTR_DB_OPERATION_NAME, ATTR_ERROR_TYPE } from "@opentelemetry/semantic-conventions";
+import {
+    ATTR_NEDA_COMPONENT,
+    ATTR_NEDA_DIRECTION,
+    ATTR_NEDA_EVENT_NAME,
+    errorTypeOf,
+    instruments,
+    MESSAGING_SYSTEM,
+    timeRedisCommand
+} from "../metrics.js";
 
 
 export class Producer
@@ -65,10 +76,15 @@ export class Producer
         
         const serialized = new Array<object>();
         const spans = new Array<otelApi.Span>();
-        
+        // Tallied here rather than emitted per event so a large batch costs one counter
+        // add per distinct event name instead of one per event.
+        const eventNameCounts = new Map<string, number>();
+
         const tracer = otelApi.trace.getTracer("n-eda");
         events.forEach((event) =>
         {
+            eventNameCounts.set(event.name, (eventNameCounts.get(event.name) ?? 0) + 1);
+
             const activeSpan = otelApi.trace.getActiveSpan();
             
             const span = tracer.startSpan(`event.${event.name} publish`, {
@@ -96,15 +112,31 @@ export class Producer
                 otelApi.trace.setSpan(otelApi.context.active(), activeSpan);
         });
         
+        const startedAt = performance.now();
         const compressed = await this._compressEvents(serialized);
+        let errorType: string | null = null;
 
-        try 
+        // The whole batch becomes ONE Redis key with ONE write-index increment, which is why
+        // the partition indexes count batches rather than events. This histogram is the
+        // multiplier between batch lag and actual event backlog.
+        instruments().batchMessageCount.record(events.length, {
+            [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+            [ATTR_MESSAGING_DESTINATION_NAME]: this._topic
+        });
+        instruments().payloadSize.record(compressed.length, {
+            [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+            [ATTR_MESSAGING_DESTINATION_NAME]: this._topic,
+            [ATTR_NEDA_DIRECTION]: "publish"
+        });
+
+        try
         {
             const writeIndex = await Make.retryWithExponentialBackoff(() => this._incrementPartitionWriteIndex(), 5)();
             await Make.retryWithExponentialBackoff(() => this._storeEvents(writeIndex, compressed), 5)();
         }
         catch (error: any)
         {
+            errorType = errorTypeOf(error);
             const message = `Error while storing ${events.length} events => Topic: ${this._topic}; Partition: ${this._partition};`;
             await this._logger.logWarning(message);
             await this._logger.logError(error);
@@ -120,18 +152,52 @@ export class Producer
         }
         finally
         {
+            // Bare topic name, never `this._key` -- that is `topic+++partition`, which is
+            // right for a span's destination but would make topic-level aggregation
+            // impossible and multiply series by the partition count.
+            const attributes: otelApi.Attributes = {
+                [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+                [ATTR_MESSAGING_OPERATION_NAME]: "publish",
+                [ATTR_MESSAGING_DESTINATION_NAME]: this._topic
+            };
+
+            if (errorType !== null)
+                attributes[ATTR_ERROR_TYPE] = errorType;
+
+            instruments().clientOperationDuration.record((performance.now() - startedAt) / 1000, attributes);
+
+            // Event name goes on the counter but never on the histogram -- a counter is one
+            // datapoint per series, whereas a histogram would multiply it by the bucket count.
+            for (const [eventName, count] of eventNameCounts)
+                instruments().sentMessages.add(count, { ...attributes, [ATTR_NEDA_EVENT_NAME]: eventName });
+
             spans.forEach(span => span.end());
         }
     }
 
-    private _compressEvents(events: ReadonlyArray<object>): Promise<Buffer>
+    private async _compressEvents(events: ReadonlyArray<object>): Promise<Buffer>
     {
-        return Make.callbackToPromise<Buffer>(Zlib.deflateRaw)(Buffer.from(JSON.stringify(events), "utf8"));
+        const startedAt = performance.now();
+        try
+        {
+            return await Make.callbackToPromise<Buffer>(Zlib.deflateRaw)(Buffer.from(JSON.stringify(events), "utf8"));
+        }
+        finally
+        {
+            instruments().compressionDuration.record((performance.now() - startedAt) / 1000, {
+                [ATTR_MESSAGING_SYSTEM]: MESSAGING_SYSTEM,
+                [ATTR_NEDA_DIRECTION]: "publish"
+            });
+        }
     }
 
     private _incrementPartitionWriteIndex(): Promise<number>
     {
-        return new Promise((resolve, reject) =>
+        // Wrapping the inner call rather than the retry wrapper around it is deliberate:
+        // Make.retryWithExponentialBackoff invokes this once per attempt, so each failed
+        // attempt records its own datapoint carrying error.type. That makes retry counts
+        // derivable without reimplementing the backoff.
+        return timeRedisCommand("INCR", "producer", () => new Promise<number>((resolve, reject) =>
         {
             this._client.incr(this.writeIndexKey, (err, val) =>
             {
@@ -143,7 +209,7 @@ export class Producer
 
                 resolve(val!);
             }).catch(e => reject(e));
-        });
+        }));
     }
     
     // private _storeEvents(writeIndex: number, eventData: Buffer): Promise<void>
@@ -169,11 +235,28 @@ export class Producer
     {
         const key = `${this.id}-${writeIndex}`;
 
-        await this._client
+        const results = await timeRedisCommand("SETEX|PUBLISH", "producer", () => this._client
             .pipeline()
             .setex(key, this._ttlSeconds, eventData)
             .publish(`${this.id}-changed`, this.id)
-            .exec();
+            .exec());
+
+        // A pipeline resolves with [Error | null, value] tuples and does NOT reject when an
+        // individual command fails. Discarding this result meant a failed SETEX was silently
+        // swallowed: the retry wrapper never fired, the write index had already advanced, and
+        // the consumer would spin through its 200-attempt read race before dropping the
+        // event permanently. Surface it so the retry wrapper can do its job.
+        const failures = (results ?? []).filter(t => t[0] != null);
+        if (failures.length > 0)
+        {
+            instruments().redisPipelineErrors.add(failures.length, {
+                [ATTR_DB_OPERATION_NAME]: "SETEX|PUBLISH",
+                [ATTR_NEDA_COMPONENT]: "producer"
+            });
+
+            const failure: Error = failures[0][0]!;
+            throw failure;
+        }
     }
     
     // private async _publish(writeIndex: number, eventData: Buffer): Promise<void>

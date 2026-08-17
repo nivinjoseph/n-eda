@@ -17,7 +17,6 @@ import { GrpcEventHandler } from "./redis-implementation/grpc-event-handler.js";
 import { GrpcDetails } from "./grpc-details.js";
 import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
 import { DefaultEdaContext } from "./eda-context.js";
-// import { ConsumerTracer } from "./event-handler-tracer";
 
 // public
 export class EdaManager implements Disposable
@@ -30,7 +29,6 @@ export class EdaManager implements Disposable
     private readonly _observerEventMap: Map<string, EventRegistration>;
     // private readonly _wildKeys: Array<string>;
 
-    // private _metricsEnabled = false;
     private _partitionKeyMapper: (event: EdaEvent) => string = null as any;
     private _eventBusRegistered = false;
     private _eventSubMgrRegistered = false;
@@ -40,8 +38,6 @@ export class EdaManager implements Disposable
     private _cleanKeys = false;
 
     private _distributedObserverTopic: Topic | null = null;
-
-    // private _consumerTracer: ConsumerTracer | null = null;
 
     private _awsLambdaDetails: LambdaDetails | null = null;
     private _isAwsLambdaConsumer = false;
@@ -74,8 +70,6 @@ export class EdaManager implements Disposable
     public get consumerGroupId(): string | null { return this._consumerGroupId; }
     public get cleanKeys(): boolean { return this._cleanKeys; }
 
-    // public get consumerTracer(): ConsumerTracer | null { return this._consumerTracer; }
-
     public get awsLambdaDetails(): LambdaDetails | null { return this._awsLambdaDetails; }
     public get awsLambdaProxyEnabled(): boolean { return this._awsLambdaDetails != null; }
     public get isAwsLambdaConsumer(): boolean { return this._isAwsLambdaConsumer; }
@@ -89,7 +83,6 @@ export class EdaManager implements Disposable
     public get isGrpcConsumer(): boolean { return this._isGrpcConsumer; }
 
     public get partitionKeyMapper(): (event: EdaEvent) => string { return this._partitionKeyMapper; }
-    // public get metricsEnabled(): boolean { return this._metricsEnabled; }
 
 
     public constructor(container?: Container)
@@ -152,14 +145,6 @@ export class EdaManager implements Disposable
         return this;
     }
 
-    // public enableMetrics(): this
-    // {
-    //     given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
-    //     this._metricsEnabled = true;
-
-    //     return this;
-    // }
-
     public usePartitionKeyMapper(func: (event: EdaEvent) => string): this
     {
         given(func, "func").ensureHasValue().ensureIsFunction();
@@ -206,18 +191,6 @@ export class EdaManager implements Disposable
 
         return this;
     }
-
-    // public registerConsumerTracer(tracer: ConsumerTracer): this
-    // {
-    //     given(tracer, "tracer").ensureHasValue().ensureIsFunction();
-    //     given(this, "this")
-    //         .ensure(t => !t._isBootstrapped, "invoking method after bootstrap")
-    //         .ensure(t => !t._consumerTracer, "consumer tracer already set");
-
-    //     this._consumerTracer = tracer;
-
-    //     return this;
-    // }
 
     public registerEventBus(eventBus: EventBus | ClassDefinition<EventBus>): this
     {
