@@ -12,8 +12,8 @@ Every reporting tick, `MetricsReporter` emits **one log line per topic-partition
 Each line's message is a flat JSON object:
 
 ```json
-{"logType":"n-eda.partition-metrics","topic":"orders","partition":3,"lag":42,
- "writeIndex":1000,"readIndex":958,"productionRate":12.5,"consumptionRate":11.75,
+{"logType":"n-eda.partition-metrics","topic":"orders","partition":3,"consumerGroupId":"billing-svc",
+ "lag":42,"writeIndex":1000,"readIndex":958,"productionRate":12.5,"consumptionRate":11.75,
  "sampledAt":1755600000000,"sampleAgeMs":4200}
 ```
 
@@ -22,6 +22,7 @@ Each line's message is a flat JSON object:
 | `logType` | Always `n-eda.partition-metrics`. The discriminator your pipeline filters on. |
 | `topic` | Topic name. |
 | `partition` | Partition number within the topic. |
+| `consumerGroupId` | The consumer group whose read offset produced `readIndex`, `lag`, and `consumptionRate` (from `registerEventSubscriptionManager`). Distinct groups consuming the same topic report independent figures. |
 | `lag` | `writeIndex - readIndex`, clamped at `0` — publish batches this consumer group is behind. **The number you alert on.** |
 | `writeIndex` | The producer's current slot counter. |
 | `readIndex` | This consumer group's current offset. |
@@ -128,8 +129,9 @@ tick may re-log an unrefreshed record, duplicates appear as extra identical samp
 duplicate delta summed as a count would double-count).
 
 `service` and `env` come from the envelope, so you can scope any dashboard by them without adding them
-as group-bys here. Keep group-bys to `@topic`/`@partition` — Datadog bills log-based metrics by
-cardinality, and these two are bounded.
+as group-bys here. Add `@consumerGroupId` to the group-bys only if multiple consumer groups read the
+same topics within one Datadog org — otherwise `service` already separates them and the extra
+cardinality is wasted. Keep group-bys bounded — Datadog bills log-based metrics by cardinality.
 
 ### 4. Filter out stale points
 

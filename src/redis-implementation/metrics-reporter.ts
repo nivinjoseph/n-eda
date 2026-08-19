@@ -37,6 +37,8 @@ export interface PartitionMetricRecord extends TopicPartitionMetrics
     logType: string;
     topic: string;
     partition: number;
+    /** The consumer group whose read offset produced `readIndex`, `lag`, and `consumptionRate`. */
+    consumerGroupId: string;
     sampleAgeMs: number;
 }
 
@@ -60,19 +62,23 @@ export class MetricsReporter implements Disposable
 {
     private readonly _brokers: ReadonlyArray<Broker>;
     private readonly _logger: Logger;
+    private readonly _consumerGroupId: string;
     private readonly _interval: Duration;
     private _timeout: NodeJS.Timeout | null = null;
     private _isReporting = false;
     private _isDisposed = false;
 
 
-    public constructor(brokers: ReadonlyArray<Broker>, logger: Logger, interval: Duration)
+    public constructor(brokers: ReadonlyArray<Broker>, logger: Logger, consumerGroupId: string, interval: Duration)
     {
         given(brokers, "brokers").ensureHasValue().ensureIsArray().ensureIsNotEmpty();
         this._brokers = brokers;
 
         given(logger, "logger").ensureHasValue().ensureIsObject();
         this._logger = logger;
+
+        given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
+        this._consumerGroupId = consumerGroupId;
 
         given(interval, "interval").ensureHasValue().ensure(t => t.toMilliSeconds() > 0, "must be greater than zero");
         this._interval = interval;
@@ -138,6 +144,7 @@ export class MetricsReporter implements Disposable
                     logType: partitionMetricsLogType,
                     topic: broker.topic.name,
                     partition,
+                    consumerGroupId: this._consumerGroupId,
                     ...metrics,
 
                     // Precomputed because log query languages cannot do date arithmetic, and clamped because
