@@ -3,6 +3,9 @@
 n-eda emits per-partition lag and throughput as structured log lines, so they can be shipped to a log
 platform, parsed into facets, and turned into dashboard metrics without a separate metrics pipeline.
 
+Metrics are **opt-in**: call `manager.enableMetrics()` before `bootstrap()`. Without it, a consuming
+process emits no metrics lines (the consumer's own queue-depth warning still fires).
+
 This document covers the log contract and how to wire it up in Datadog. For the runtime that produces
 it, see `MetricsReporter` in `src/redis-implementation/metrics-reporter.ts`.
 
@@ -58,11 +61,11 @@ event's own time and shift the event on the timeline. Don't rename it back.
 
 ## Cadence and volume
 
-Default is one tick per minute, adjustable at bootstrap (positive, at most 2^31-1 ms ≈ 24.8 days —
-Node's timer maximum; beyond it `configureMetricsInterval` throws):
+Default is one tick per minute, adjustable via `enableMetrics`'s optional parameter (positive, at
+most 2^31-1 ms ≈ 24.8 days — Node's timer maximum; beyond it `enableMetrics` throws):
 
 ```typescript
-manager.configureMetricsInterval(Duration.fromMinutes(5));
+manager.enableMetrics(Duration.fromMinutes(5));
 ```
 
 Volume is **`topics × partitions` lines per interval, per process**. A service owning 5 topics of 16

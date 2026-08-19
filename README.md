@@ -575,10 +575,11 @@ Pass a `Container` to share one with the rest of your app; **you** must then boo
   case-insensitive duplicate name.
 - `usePartitionKeyMapper(func: (event: EdaEvent) => string): this` — override the partition key.
   **Callable once**; defaults to `event.partitionKey`.
-- `configureMetricsInterval(duration: Duration): this` — how often per-partition lag/throughput is
-  logged (see [docs/observability.md](docs/observability.md)). Defaults to one minute. One log line
-  per topic-partition per interval, so widen it to trade dashboard resolution for log cost. Must be
-  positive and at most 2^31-1 ms (~24.8 days).
+- `enableMetrics(metricsInterval?: Duration): this` — opt in to per-partition lag/throughput logging
+  (see [docs/observability.md](docs/observability.md)); **no metrics lines are emitted without this
+  call**. The optional interval defaults to one minute; must be positive and at most 2^31-1 ms
+  (~24.8 days). One log line per topic-partition per interval, so widen it to trade dashboard
+  resolution for log cost.
 - `registerEventHandlers(...eventHandlerClasses): this` — throws if a class carries no `@event`/
   `@observedEvent`, if two handlers claim the same event type or observation key, or if two handler
   classes share a name.
@@ -610,7 +611,7 @@ Pass a `Container` to share one with the rest of your app; **you** must then boo
   Disposes the container even if it was supplied externally.
 
 **Getters** — `containerRegistry`, `serviceLocator`, `topics`, `distributedObserverTopic`, `eventMap`,
-`observerEventMap`, `consumerName`, `consumerGroupId`, `cleanKeys`, `partitionKeyMapper`, `metricsInterval`,
+`observerEventMap`, `consumerName`, `consumerGroupId`, `cleanKeys`, `partitionKeyMapper`, `metricsEnabled`, `metricsInterval`,
 `awsLambdaDetails`, `awsLambdaProxyEnabled`, `isAwsLambdaConsumer`, `rpcDetails`, `rpcProxyEnabled`,
 `isRpcConsumer`, `grpcDetails`, `grpcProxyEnabled`, `isGrpcConsumer`.
 

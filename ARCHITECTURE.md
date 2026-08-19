@@ -309,7 +309,7 @@ All hardcoded; none are configurable at runtime.
 | `maxProcessAttempts = 10`, `(5+n)*n` s | `processor.ts` | handler retry ladder, 510 s total |
 | `retryWithExponentialBackoff(..., 5)` | `producer.ts` | 6 attempts each for `INCR` and `SETEX` |
 | `Duration.fromHours(1)` | `optimized-scheduler.ts` | empty-queue GC sweep |
-| `Duration.fromMinutes(1)` default | `metrics-reporter.ts` | metrics log cadence; override with `configureMetricsInterval` |
+| `Duration.fromMinutes(1)` default | `metrics-reporter.ts` | metrics log cadence (opt-in); enable and override via `enableMetrics(interval?)` |
 | half the metrics interval | `consumer.ts` | lag report cadence, derived so no logged line is more than one report stale |
 | `maxAcceptableLag = 1000` | `metrics-reporter.ts` | per-tick lag warning threshold |
 | `connectionPoolSize` default `50` | `grpc-client-factory.ts` | round-robin gRPC client pool |

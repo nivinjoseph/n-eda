@@ -33,11 +33,12 @@ import { DefaultEdaContext } from "../eda-context.js";
  *
  * On `consume()` it creates, for every topic that is neither disabled nor publish-only, one `Consumer` and
  * one `Processor` per owned partition — all partitions unless `Topic.configurePartitionAffinity` narrowed
- * the range — plus a `Broker` per topic, and process-wide a `Monitor` and a `MetricsReporter`.
+ * the range — plus a `Broker` per topic, process-wide a `Monitor`, and (only when
+ * `EdaManager.enableMetrics()` was called) a `MetricsReporter`.
  *
  * Note: this is the only path that populates `EdaContext`. If every registered topic is publish-only or
  * disabled while a subscription manager is registered, `consume()` throws, because the `Monitor` requires a
- * non-empty consumer list and the `MetricsReporter` a non-empty broker list.
+ * non-empty consumer list.
  */
 @inject("EdaRedisClient", "Logger")
 export class RedisEventSubMgr implements EventSubMgr
@@ -155,12 +156,16 @@ export class RedisEventSubMgr implements EventSubMgr
                 if (this._isDisposing)
                     return;
 
-                // consumerGroupId is non-null here: registerEventSubscriptionManager requires it, and
-                // consume() only runs when a sub-mgr was registered.
-                this._metricsReporter = new MetricsReporter(
-                    this._brokers, this._logger, this._manager.consumerGroupId!,
-                    this._manager.consumerName, this._manager.metricsInterval);
-                this._metricsReporter.start();
+                // Metrics are opt-in via EdaManager.enableMetrics(); without it no reporter exists and no
+                // metrics lines are emitted. consumerGroupId is non-null here: registerEventSubscriptionManager
+                // requires it, and consume() only runs when a sub-mgr was registered.
+                if (this._manager.metricsEnabled)
+                {
+                    this._metricsReporter = new MetricsReporter(
+                        this._brokers, this._logger, this._manager.consumerGroupId!,
+                        this._manager.consumerName, this._manager.metricsInterval);
+                    this._metricsReporter.start();
+                }
 
                 this._brokers.forEach(t => t.initialize());
             }

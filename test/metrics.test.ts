@@ -296,24 +296,39 @@ await describe("Metrics tests", async () =>
 
     await describe("configuration", async () =>
     {
-        await test("configureMetricsInterval accepts a valid interval and exposes it via the getter", () =>
+        await test("metrics are off by default", () =>
+        {
+            assert.strictEqual(new EdaManager().metricsEnabled, false);
+        });
+
+        await test("enableMetrics turns metrics on with the default 1-minute interval", () =>
         {
             const manager = new EdaManager();
-            manager.configureMetricsInterval(Duration.fromMinutes(5));
+            manager.enableMetrics();
 
+            assert.strictEqual(manager.metricsEnabled, true);
+            assert.strictEqual(manager.metricsInterval.toMilliSeconds(), minute);
+        });
+
+        await test("enableMetrics honors a custom interval", () =>
+        {
+            const manager = new EdaManager();
+            manager.enableMetrics(Duration.fromMinutes(5));
+
+            assert.strictEqual(manager.metricsEnabled, true);
             assert.strictEqual(manager.metricsInterval.toMilliSeconds(), 5 * minute);
         });
 
-        await test("configureMetricsInterval rejects an interval over Node's timer maximum", () =>
+        await test("enableMetrics rejects an interval over Node's timer maximum", () =>
         {
             // Beyond 2^31-1 ms, setInterval clamps to 1ms and the reporter would flood the logs with
             // topics x partitions lines per millisecond — the opposite of a widened interval's intent.
-            assert.throws(() => new EdaManager().configureMetricsInterval(Duration.fromDays(30)));
+            assert.throws(() => new EdaManager().enableMetrics(Duration.fromDays(30)));
         });
 
-        await test("configureMetricsInterval rejects a zero interval", () =>
+        await test("enableMetrics rejects a zero interval", () =>
         {
-            assert.throws(() => new EdaManager().configureMetricsInterval(Duration.fromMilliSeconds(0)));
+            assert.throws(() => new EdaManager().enableMetrics(Duration.fromMilliSeconds(0)));
         });
     });
 });
