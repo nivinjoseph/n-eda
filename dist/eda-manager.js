@@ -52,7 +52,7 @@ export class EdaManager {
     _eventMap;
     _observerEventMap;
     // private readonly _wildKeys: Array<string>;
-    // private _metricsEnabled = false;
+    _metricsEnabled = false;
     _metricsInterval = Duration.fromMinutes(1);
     _partitionKeyMapper = null;
     _eventBusRegistered = false;
@@ -131,10 +131,11 @@ export class EdaManager {
      * (`event => event.partitionKey`) unless {@link EdaManager.usePartitionKeyMapper} supplied one.
      */
     get partitionKeyMapper() { return this._partitionKeyMapper; }
-    // public get metricsEnabled(): boolean { return this._metricsEnabled; }
+    /** Whether per-partition metrics logging is on. `false` unless {@link EdaManager.enableMetrics} was called. */
+    get metricsEnabled() { return this._metricsEnabled; }
     /**
-     * How often the `MetricsReporter` logs per-partition lag and throughput. Defaults to one minute; see
-     * {@link EdaManager.configureMetricsInterval}.
+     * How often the `MetricsReporter` logs per-partition lag and throughput when metrics are enabled.
+     * Defaults to one minute; see {@link EdaManager.enableMetrics}.
      */
     get metricsInterval() { return this._metricsInterval; }
     /**
@@ -226,36 +227,33 @@ export class EdaManager {
         }
         return this;
     }
-    // public enableMetrics(): this
-    // {
-    //     given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
-    //     this._metricsEnabled = true;
-    //     return this;
-    // }
     /**
-     * Overrides how often the `MetricsReporter` logs per-partition lag and throughput. Defaults to one
-     * minute.
+     * Opts this process in to per-partition metrics logging — one flat JSON line per topic-partition per
+     * interval, shaped for log-pipeline dashboards (see `docs/observability.md`). Without this call, no
+     * metrics lines are emitted.
      *
-     * RULE: the reporter emits one log line **per topic-partition** per interval, so ingest volume is
-     * `topics × partitions` lines per interval. Widen this on a service owning many partitions to trade
-     * dashboard resolution for log cost.
+     * RULE: ingest volume is `topics × partitions` lines per interval. Widen the interval on a service
+     * owning many partitions to trade dashboard resolution for log cost.
      *
      * Note: consumers report to their `Broker` at half this interval, so on a healthy consume loop every
      * logged line is at most one report old. A loop blocked mid-batch (e.g. a handler stuck in its retry
      * ladder) pauses reporting for that partition — which the logged `sampleAgeMs` field exposes.
      *
-     * @param duration - how long to wait between reporting ticks; greater than zero, at most ~24.8 days
-     * (Node's 2^31-1 ms timer maximum — beyond it `setInterval` clamps to 1ms and would flood the logs)
+     * @param metricsInterval - how long to wait between reporting ticks; greater than zero, at most
+     * ~24.8 days (Node's 2^31-1 ms timer maximum — beyond it `setInterval` clamps to 1ms and would flood
+     * the logs). Defaults to one minute when omitted.
      * @returns this manager, for chaining
-     * @throws if `duration` is missing, not positive, or over the timer maximum, or if called after
+     * @throws if `metricsInterval` is given but not positive or over the timer maximum, or if called after
      * `bootstrap()`
      */
-    configureMetricsInterval(duration) {
-        given(duration, "duration").ensureHasValue()
+    enableMetrics(metricsInterval) {
+        given(metricsInterval, "metricsInterval")
             .ensure(t => t.toMilliSeconds() > 0, "must be greater than zero")
             .ensure(t => t.toMilliSeconds() <= 2147483647, "must not exceed 2^31-1 ms (~24.8 days), Node's timer maximum");
         given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
-        this._metricsInterval = duration;
+        this._metricsEnabled = true;
+        if (metricsInterval != null)
+            this._metricsInterval = metricsInterval;
         return this;
     }
     /**

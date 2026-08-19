@@ -51,7 +51,7 @@ export class Consumer {
     _delayCanceller = null;
     _lastReportTime = 0;
     // Half the MetricsReporter's logging interval, so no logged line is ever more than one report stale.
-    // Immutable after bootstrap (configureMetricsInterval throws post-bootstrap), hence computed once.
+    // Immutable after bootstrap (enableMetrics throws post-bootstrap), hence computed once.
     _reportIntervalMs;
     get _writeIndexKey() { return `${this.id}-write-index`; }
     get _readIndexKey() { return `${this._fullId}-read-index`; }

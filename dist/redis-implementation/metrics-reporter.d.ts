@@ -31,8 +31,8 @@ export interface PartitionMetricRecord extends TopicPartitionMetrics {
  * the timer; `dispose()` clears it. Both are idempotent, and `start()` after disposal throws.
  *
  * RULE: one line per topic-partition, never an aggregate — see {@link PartitionMetricRecord}. Ingest volume
- * is therefore `topics × partitions` lines per interval, which is what `EdaManager.configureMetricsInterval`
- * exists to control.
+ * is therefore `topics × partitions` lines per interval, which is what `EdaManager.enableMetrics`'s
+ * interval parameter exists to control.
  *
  * Note: purely a reader of `Broker.metrics` — it holds no Redis connection and never writes. The figures it
  * logs are refreshed by consumers on their own schedule, so a record may be re-logged unrefreshed; the
