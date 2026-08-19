@@ -172,7 +172,8 @@ export class MetricsReporter implements Disposable
             // is better served by a monitor on the generated lag metric.
             if (record.lag > maxAcceptableLag)
                 calls.push(this._logger.logWarning(
-                    `Event queue lag for topic ${record.topic} partition ${record.partition} is ${record.lag} `
+                    `Event queue lag for topic ${record.topic} partition ${record.partition} `
+                    + `(consumer ${record.consumerName} [${record.consumerGroupId}]) is ${record.lag} `
                     + `(threshold ${maxAcceptableLag}); consuming ${record.consumptionRate}/min against `
                     + `${record.productionRate}/min produced.`));
 

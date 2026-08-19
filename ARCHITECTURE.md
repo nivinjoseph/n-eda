@@ -107,8 +107,11 @@ const lowerBoundReadIndex = readIndex + 1;
 let upperBoundReadIndex = writeIndex;
 if (depth > maxRead)
 {
-    upperBoundReadIndex = readIndex + maxRead - 1;
-    await this._logger.logWarning(`Event queue depth for ${this.id} is ${depth}.`);
+    upperBoundReadIndex = readIndex + maxRead;
+
+    if (depth > depthWarningThreshold) // 500
+        await this._logger.logWarning(
+            `Event queue depth for ${this.id} (consumer ${this._manager.consumerName} [${this._manager.consumerGroupId}]) is ${depth}.`);
 }
 ```
 
@@ -298,6 +301,7 @@ All hardcoded; none are configurable at runtime.
 |---|---|---|
 | `"n-eda"` | `consumer.ts`, `producer.ts` | Redis key prefix, tracer name, `messaging.system` |
 | `maxRead = 50` | `consumer.ts` | max write-index slots (batches) per poll |
+| `depthWarningThreshold = 500` | `consumer.ts` | per-read backlog warning; decoupled from `maxRead` so routine catch-up stays quiet |
 | `maxReadAttempts = 200` @ 100/250 ms | `consumer.ts` | payload-not-yet-written retry; ≈42 s worst case per slot |
 | `randomInt(2500, 5000)` ms | `consumer.ts` | idle poll jitter, cancelled by the pub/sub doorbell |
 | `Delay.seconds(5)` | `consumer.ts` | backoff after an unexpected consume-loop error |

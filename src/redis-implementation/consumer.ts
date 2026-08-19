@@ -154,6 +154,9 @@ export class Consumer implements Disposable
         const maxReadAttempts = 200;
         const failedReadShortDelayMs = 100;
         const failedReadLongDelayMs = 250;
+        // Deliberately decoupled from maxRead: exceeding one read batch (50) is routine catch-up and fires
+        // every loop iteration, so warning at that level is noise. 500 means a backlog worth looking at.
+        const depthWarningThreshold = 500;
 
         while (true)
         {
@@ -192,7 +195,10 @@ export class Consumer implements Disposable
                     // Inclusive window [readIndex + 1, readIndex + maxRead] = exactly maxRead slots; the
                     // previous `+ maxRead - 1` read one slot short of the cap on every backlogged batch.
                     upperBoundReadIndex = readIndex + maxRead;
-                    await this._logger.logWarning(`Event queue depth for ${this.id} is ${depth}.`);
+
+                    if (depth > depthWarningThreshold)
+                        await this._logger.logWarning(
+                            `Event queue depth for ${this.id} (consumer ${this._manager.consumerName} [${this._manager.consumerGroupId}]) is ${depth}.`);
                 }
 
                 const eventsData = await this._batchRetrieveEvents(
