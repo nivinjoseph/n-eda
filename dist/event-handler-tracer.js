@@ -1,5 +1,8 @@
-// // public
+// INACTIVE — this file is commented out in its entirety. The corresponding `EdaManager.registerConsumerTracer`
+// is also commented out, so there is no per-handler tracing hook. OpenTelemetry instrumentation is instead
+// emitted inline by producer.ts, consumer.ts, and processor.ts. See ARCHITECTURE.md.
 export {};
+// // public
 // export type EventInfo = {
 //     readonly topic: string;
 //     readonly partition: number;

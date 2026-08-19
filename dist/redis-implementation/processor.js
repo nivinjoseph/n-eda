@@ -5,6 +5,21 @@ import { EdaManager } from "../eda-manager.js";
 // import { ConsumerTracer } from "../event-handler-tracer";
 import * as otelApi from "@opentelemetry/api";
 import { ATTR_MESSAGING_SYSTEM, ATTR_MESSAGING_OPERATION_TYPE, ATTR_MESSAGING_DESTINATION_NAME, ATTR_MESSAGING_DESTINATION_TEMPORARY, ATTR_MESSAGING_MESSAGE_ID, ATTR_MESSAGING_MESSAGE_CONVERSATION_ID } from "@opentelemetry/semantic-conventions/incubating";
+/**
+ * Runs one work item at a time, applying the retry policy that defines n-eda's failure semantics.
+ *
+ * Retry ladder: **10 attempts**, sleeping `(5 + n) * n` seconds between them — `6, 14, 24, 36, 50, 66, 84,
+ * 104, 126` — about **8 minutes 30 seconds** in total. On the final failure the work item's deferred is
+ * rejected; the consumer then logs, marks the event processed, and moves on. **There is no dead-letter
+ * queue.**
+ *
+ * Note: a failing event holds its partition key locked for the whole ladder, stalling that key's queue and
+ * its consumer's batch window. Every attempt logs the full serialized event payload, and the exhaustion path
+ * writes it into span attributes too — a consideration if events carry personal data.
+ *
+ * Subclasses supply the actual dispatch: `DefaultProcessor` runs handlers in-process; the proxy processors
+ * forward to Lambda, RPC, or gRPC.
+ */
 export class Processor {
     _manager;
     // private readonly _consumerTracer: ConsumerTracer | null;

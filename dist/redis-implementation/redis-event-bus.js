@@ -11,6 +11,20 @@ import { NedaClearTrackedKeysEvent } from "./neda-clear-tracked-keys-event.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 import { Producer } from "./producer.js";
 // public
+/**
+ * The Redis-backed `EventBus` — the only shipped implementation.
+ *
+ * Contract: register the **class** with `EdaManager.registerEventBus(RedisEventBus)`. It is
+ * `@inject("EdaRedisClient")`, and resolves `"Logger"` from the container during `initialize`, so both DI
+ * keys must be registered by your `ComponentInstaller`.
+ *
+ * Storage model: events are bucketed by partition, each partition's batch is deflate-compressed and stored
+ * under a single `INCR`-allocated slot (`SETEX`), and a pub/sub doorbell wakes the matching consumer. See
+ * `ARCHITECTURE.md` for the full key layout.
+ *
+ * Note: `dispose()` drains for a few seconds and flips a flag — it does **not** close the Redis client.
+ * Register a `Disposable` alongside the client so the connection is actually torn down.
+ */
 let RedisEventBus = (() => {
     let _classDecorators = [inject("EdaRedisClient")];
     let _classDescriptor;
@@ -33,10 +47,23 @@ let RedisEventBus = (() => {
         _disposePromise = null;
         _manager = null;
         _logger = null;
+        /**
+         * @param redisClient - injected from the DI key `"EdaRedisClient"`; shared with every producer and
+         * consumer in the process
+         */
         constructor(redisClient) {
             given(redisClient, "redisClient").ensureHasValue().ensureIsObject();
             this._client = redisClient;
         }
+        /**
+         * Binds the bus to its manager and creates one `Producer` per partition of every enabled topic.
+         *
+         * Called by `EdaManager.bootstrap()` — never call it yourself.
+         *
+         * @param manager - the bootstrapping manager
+         * @throws `ObjectDisposedException` if already disposed
+         * @throws if the manager is missing or not an `EdaManager`, or if already initialized
+         */
         initialize(manager) {
             given(manager, "manager").ensureHasValue().ensureIsObject().ensureIsType(EdaManager);
             given(this, "this").ensure(t => !t._manager, "already initialized");

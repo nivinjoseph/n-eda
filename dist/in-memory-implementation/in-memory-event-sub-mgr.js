@@ -1,3 +1,7 @@
+// INACTIVE — this file is commented out in its entirety and `InMemoryEventSubMgr` is not exported from
+// src/index.ts. There is no in-memory implementation of `EventSubMgr`; Redis is required. Kept for
+// reference only. See docs/known-issues.md.
+export {};
 // import { EventSubMgr } from "../event-sub-mgr";
 // import { ServiceLocator } from "@nivinjoseph/n-ject";
 // import { given } from "@nivinjoseph/n-defensive";
@@ -9,7 +13,6 @@
 // import { ObjectDisposedException, ApplicationException } from "@nivinjoseph/n-exception";
 // import { EdaManager } from "../eda-manager";
 // import { EventRegistration } from "../event-registration";
-export {};
 // // public
 // export class InMemoryEventSubMgr implements EventSubMgr
 // {

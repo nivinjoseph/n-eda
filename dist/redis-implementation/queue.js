@@ -1,3 +1,11 @@
+/**
+ * A circular-buffer FIFO queue with amortized O(1) enqueue and dequeue.
+ *
+ * Note: internal. Used for the scheduler's per-partition-key work queues, where the array-shift cost of a
+ * naive queue would show up under load.
+ *
+ * @typeParam T - the element type
+ */
 export class Queue {
     _first = null;
     _last = null;

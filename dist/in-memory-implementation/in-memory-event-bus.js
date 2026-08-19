@@ -1,9 +1,12 @@
+// INACTIVE — this file is commented out in its entirety and `InMemoryEventBus` is not exported from
+// src/index.ts. There is no in-memory implementation of `EventBus`; Redis is required. Kept for reference
+// only. See docs/known-issues.md.
+export {};
 // import { EventBus } from "../event-bus";
 // import { EdaEvent } from "../eda-event";
 // import { given } from "@nivinjoseph/n-defensive";
 // import { ObjectDisposedException } from "@nivinjoseph/n-exception";
 // import { EdaManager } from "../eda-manager";
-export {};
 // // public
 // export class InMemoryEventBus implements EventBus
 // {

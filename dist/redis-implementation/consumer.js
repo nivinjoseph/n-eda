@@ -1,5 +1,5 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { Delay, Deserializer, Duration, Make } from "@nivinjoseph/n-util";
+import { Delay, Deserializer, Make } from "@nivinjoseph/n-util";
 // import * as Redis from "redis";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import * as otelApi from "@opentelemetry/api";
@@ -12,6 +12,21 @@ import { NedaClearTrackedKeysEvent } from "./neda-clear-tracked-keys-event.js";
 import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-notify-event.js";
 // import * as MessagePack from "msgpackr";
 // import * as Snappy from "snappy";
+/**
+ * Reads one partition of one topic for one consumer group, and routes what it finds to the broker.
+ *
+ * The loop: `MGET` the write and read indexes; if caught up, sleep on a cancellable delay that the `Monitor`
+ * interrupts on a pub/sub doorbell; otherwise `MGET` a window of at most 50 slots, inflate and deserialize
+ * each batch, skip ids already in the dedupe set, route the rest concurrently, then advance the read index.
+ *
+ * Contract: the read index advances only after every routed event settles, so a crash mid-batch replays that
+ * batch. Deduplication is a rolling window of the last 1000 event ids per (topic, partition, group),
+ * persisted as a Redis list and reloaded at startup. Events whose handler registration is missing are marked
+ * processed and skipped — deliberate, so a rolling deployment does not stall.
+ *
+ * Note: a slot whose payload has not landed yet is retried up to 200 times (≈42 s) — this absorbs the race
+ * between the producer's `INCR` and its `SETEX`, which are separate round-trips.
+ */
 export class Consumer {
     _edaPrefix = "n-eda";
     _nedaClearTrackedKeysEventName = NedaClearTrackedKeysEvent.getTypeName();
@@ -35,6 +50,9 @@ export class Consumer {
     _broker = null;
     _delayCanceller = null;
     _lastReportTime = 0;
+    // Half the MetricsReporter's logging interval, so no logged line is ever more than one report stale.
+    // Immutable after bootstrap (configureMetricsInterval throws post-bootstrap), hence computed once.
+    _reportIntervalMs;
     get _writeIndexKey() { return `${this.id}-write-index`; }
     get _readIndexKey() { return `${this._fullId}-read-index`; }
     get _trackedKeysKey() { return `${this._fullId}-tracked_keys`; }
@@ -51,6 +69,7 @@ export class Consumer {
         given(partition, "partition").ensureHasValue().ensureIsNumber();
         this._partition = partition;
         this._cleanKeys = this._manager.cleanKeys;
+        this._reportIntervalMs = this._manager.metricsInterval.toMilliSeconds() / 2;
         given(flush, "flush").ensureHasValue().ensureIsBoolean();
         this._flush = flush;
     }
@@ -87,6 +106,9 @@ export class Consumer {
         const maxReadAttempts = 200;
         const failedReadShortDelayMs = 100;
         const failedReadLongDelayMs = 250;
+        // Deliberately decoupled from maxRead: exceeding one read batch (50) is routine catch-up and fires
+        // every loop iteration, so warning at that level is noise. 500 means a backlog worth looking at.
+        const depthWarningThreshold = 500;
         while (true) {
             if (this._isDisposed)
                 return;
@@ -95,8 +117,9 @@ export class Consumer {
                 // const readIndex = await this._fetchConsumerPartitionReadIndex();
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
                 const now = Date.now();
-                if ((now - this._lastReportTime) > Duration.fromMinutes(1).toMilliSeconds()) {
-                    this._broker.report(this._partition, writeIndex, readIndex);
+                // report() is an in-memory map write, so the half-interval frequency costs nothing.
+                if ((now - this._lastReportTime) > this._reportIntervalMs) {
+                    this._broker.report(this._partition, writeIndex, readIndex, now);
                     this._lastReportTime = now;
                 }
                 if (readIndex >= writeIndex) {
@@ -110,8 +133,11 @@ export class Consumer {
                 const lowerBoundReadIndex = readIndex + 1;
                 let upperBoundReadIndex = writeIndex;
                 if (depth > maxRead) {
-                    upperBoundReadIndex = readIndex + maxRead - 1;
-                    await this._logger.logWarning(`Event queue depth for ${this.id} is ${depth}.`);
+                    // Inclusive window [readIndex + 1, readIndex + maxRead] = exactly maxRead slots; the
+                    // previous `+ maxRead - 1` read one slot short of the cap on every backlogged batch.
+                    upperBoundReadIndex = readIndex + maxRead;
+                    if (depth > depthWarningThreshold)
+                        await this._logger.logWarning(`Event queue depth for ${this.id} (consumer ${this._manager.consumerName} [${this._manager.consumerGroupId}]) is ${depth}.`);
                 }
                 const eventsData = await this._batchRetrieveEvents(lowerBoundReadIndex, upperBoundReadIndex);
                 if (this._flush) {

@@ -2,6 +2,21 @@ import { Disposable } from "@nivinjoseph/n-util";
 import { Redis } from "ioredis";
 import { EdaManager } from "../eda-manager.js";
 import { Broker } from "./broker.js";
+/**
+ * Reads one partition of one topic for one consumer group, and routes what it finds to the broker.
+ *
+ * The loop: `MGET` the write and read indexes; if caught up, sleep on a cancellable delay that the `Monitor`
+ * interrupts on a pub/sub doorbell; otherwise `MGET` a window of at most 50 slots, inflate and deserialize
+ * each batch, skip ids already in the dedupe set, route the rest concurrently, then advance the read index.
+ *
+ * Contract: the read index advances only after every routed event settles, so a crash mid-batch replays that
+ * batch. Deduplication is a rolling window of the last 1000 event ids per (topic, partition, group),
+ * persisted as a Redis list and reloaded at startup. Events whose handler registration is missing are marked
+ * processed and skipped — deliberate, so a rolling deployment does not stall.
+ *
+ * Note: a slot whose payload has not landed yet is retried up to 200 times (≈42 s) — this absorbs the race
+ * between the producer's `INCR` and its `SETEX`, which are separate round-trips.
+ */
 export declare class Consumer implements Disposable {
     private readonly _edaPrefix;
     private readonly _nedaClearTrackedKeysEventName;
@@ -23,6 +38,7 @@ export declare class Consumer implements Disposable {
     private _broker;
     private _delayCanceller;
     private _lastReportTime;
+    private readonly _reportIntervalMs;
     private get _writeIndexKey();
     private get _readIndexKey();
     private get _trackedKeysKey();

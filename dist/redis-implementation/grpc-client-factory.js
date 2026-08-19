@@ -7,6 +7,16 @@ import Path from "node:path";
 // import { ConnectionOptions } from "tls";
 import { fileURLToPath } from "node:url";
 import { EdaManager } from "../eda-manager.js";
+/**
+ * Builds and hands out gRPC clients from a fixed round-robin pool.
+ *
+ * Contract: pool size comes from `GrpcDetails.connectionPoolSize`, defaulting to 50 (a value of 0 or less is
+ * coerced to the default). Credentials are always insecure — the TLS branch is commented out and
+ * `GrpcDetails.isSecure` is ignored.
+ *
+ * Note: the `.proto` files are resolved from `src/`, not `dist/`, so gRPC only works when the published
+ * package still ships its sources. See `docs/known-issues.md`.
+ */
 export class GrpcClientFactory {
     _manager;
     _logger;

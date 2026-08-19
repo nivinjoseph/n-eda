@@ -1,9 +1,11 @@
+// INACTIVE — this file is commented out in its entirety and is unwired. `RedisEventSubMgr` always constructs
+// the standard `Consumer`. Kept for reference only.
+export {};
 // import { ApplicationException } from "@nivinjoseph/n-exception";
 // import { Delay, Deserializer, Make } from "@nivinjoseph/n-util";
 // import { EventRegistration } from "../event-registration";
 // import { Consumer } from "./consumer";
 // import { ConsumerProfiler } from "./consumer-profiler";
-export {};
 // export class ProfilingConsumer extends Consumer
 // {
 //     private readonly _profiler = new ConsumerProfiler();
