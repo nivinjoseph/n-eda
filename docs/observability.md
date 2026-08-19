@@ -13,8 +13,8 @@ Each line's message is a flat JSON object:
 
 ```json
 {"logType":"n-eda.partition-metrics","topic":"orders","partition":3,"consumerGroupId":"billing-svc",
- "lag":42,"writeIndex":1000,"readIndex":958,"productionRate":12.5,"consumptionRate":11.75,
- "sampledAt":1755600000000,"sampleAgeMs":4200}
+ "consumerName":"billing-worker-2","lag":42,"writeIndex":1000,"readIndex":958,
+ "productionRate":12.5,"consumptionRate":11.75,"sampledAt":1755600000000,"sampleAgeMs":4200}
 ```
 
 | Field | Meaning |
@@ -23,6 +23,7 @@ Each line's message is a flat JSON object:
 | `topic` | Topic name. |
 | `partition` | Partition number within the topic. |
 | `consumerGroupId` | The consumer group whose read offset produced `readIndex`, `lag`, and `consumptionRate` (from `registerEventSubscriptionManager`). Distinct groups consuming the same topic report independent figures. |
+| `consumerName` | Instance label from `useConsumerName` (`UNNAMED` if never set). When one group is scaled across replicas with disjoint partition-affinity ranges, this is what identifies which instance reported the line. |
 | `lag` | `writeIndex - readIndex`, clamped at `0` — publish batches this consumer group is behind. **The number you alert on.** |
 | `writeIndex` | The producer's current slot counter. |
 | `readIndex` | This consumer group's current offset. |

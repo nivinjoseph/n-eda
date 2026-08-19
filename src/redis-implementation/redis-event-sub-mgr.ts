@@ -158,7 +158,8 @@ export class RedisEventSubMgr implements EventSubMgr
                 // consumerGroupId is non-null here: registerEventSubscriptionManager requires it, and
                 // consume() only runs when a sub-mgr was registered.
                 this._metricsReporter = new MetricsReporter(
-                    this._brokers, this._logger, this._manager.consumerGroupId!, this._manager.metricsInterval);
+                    this._brokers, this._logger, this._manager.consumerGroupId!,
+                    this._manager.consumerName, this._manager.metricsInterval);
                 this._metricsReporter.start();
 
                 this._brokers.forEach(t => t.initialize());

@@ -37,7 +37,7 @@ function createReporter(brokers: Array<Broker>): MetricsReporter
     };
 
     // Never started in these tests — buildRecords is called directly, so no timer is involved.
-    return new MetricsReporter(brokers, logger, "test-group", Duration.fromMinutes(1));
+    return new MetricsReporter(brokers, logger, "test-group", "test-consumer", Duration.fromMinutes(1));
 }
 
 const minute = Duration.fromMinutes(1).toMilliSeconds();
@@ -241,6 +241,7 @@ await describe("Metrics tests", async () =>
                 topic: "orders",
                 partition: 0,
                 consumerGroupId: "test-group",
+                consumerName: "test-consumer",
                 lag: 50,
                 writeIndex: 130,
                 readIndex: 80,

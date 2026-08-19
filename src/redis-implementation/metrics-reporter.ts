@@ -39,6 +39,8 @@ export interface PartitionMetricRecord extends TopicPartitionMetrics
     partition: number;
     /** The consumer group whose read offset produced `readIndex`, `lag`, and `consumptionRate`. */
     consumerGroupId: string;
+    /** Instance label from `useConsumerName` (`"UNNAMED"` if never set) — identifies which replica reported. */
+    consumerName: string;
     sampleAgeMs: number;
 }
 
@@ -63,13 +65,15 @@ export class MetricsReporter implements Disposable
     private readonly _brokers: ReadonlyArray<Broker>;
     private readonly _logger: Logger;
     private readonly _consumerGroupId: string;
+    private readonly _consumerName: string;
     private readonly _interval: Duration;
     private _timeout: NodeJS.Timeout | null = null;
     private _isReporting = false;
     private _isDisposed = false;
 
 
-    public constructor(brokers: ReadonlyArray<Broker>, logger: Logger, consumerGroupId: string, interval: Duration)
+    public constructor(brokers: ReadonlyArray<Broker>, logger: Logger, consumerGroupId: string,
+        consumerName: string, interval: Duration)
     {
         given(brokers, "brokers").ensureHasValue().ensureIsArray().ensureIsNotEmpty();
         this._brokers = brokers;
@@ -79,6 +83,9 @@ export class MetricsReporter implements Disposable
 
         given(consumerGroupId, "consumerGroupId").ensureHasValue().ensureIsString();
         this._consumerGroupId = consumerGroupId;
+
+        given(consumerName, "consumerName").ensureHasValue().ensureIsString();
+        this._consumerName = consumerName;
 
         given(interval, "interval").ensureHasValue().ensure(t => t.toMilliSeconds() > 0, "must be greater than zero");
         this._interval = interval;
@@ -145,6 +152,7 @@ export class MetricsReporter implements Disposable
                     topic: broker.topic.name,
                     partition,
                     consumerGroupId: this._consumerGroupId,
+                    consumerName: this._consumerName,
                     ...metrics,
 
                     // Precomputed because log query languages cannot do date arithmetic, and clamped because
