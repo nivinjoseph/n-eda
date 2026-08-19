@@ -1,6 +1,6 @@
 import { given } from "@nivinjoseph/n-defensive";
 import { ObjectDisposedException } from "@nivinjoseph/n-exception";
-import { Disposable } from "@nivinjoseph/n-util";
+import { Disposable, Duration } from "@nivinjoseph/n-util";
 import * as otelApi from "@opentelemetry/api";
 import { EdaEvent } from "../eda-event.js";
 import { EventRegistration } from "../event-registration.js";
@@ -10,6 +10,9 @@ import { OptimizedScheduler } from "./optimized-scheduler.js";
 import { Processor } from "./processor.js";
 import { Scheduler } from "./scheduler.js";
 import { Topic, TopicPartitionMetrics } from "../topic.js";
+
+
+const oneMinuteMs = Duration.fromMinutes(1).toMilliSeconds();
 
 
 /**
@@ -66,23 +69,43 @@ export class Broker implements Disposable
         return this._scheduler.scheduleWork(routedEvent);
     }
     
-    public report(partition: number, writeIndex: number, readIndex: number): void
+    /**
+     * Records a partition's current indexes and derives its throughput rates from the previous report.
+     *
+     * RULE: the rates are normalized to batches per minute rather than raw deltas, because the
+     * `MetricsReporter` logs on a timer independent of this call and will re-log an entry that no consumer
+     * has refreshed since the previous tick. A per-minute rate survives that re-logging unchanged; a raw
+     * delta would read as a second, phantom batch of the same events.
+     *
+     * @param partition - the partition being reported on
+     * @param writeIndex - the producer's current slot counter
+     * @param readIndex - this consumer group's current offset
+     * @param now - epoch milliseconds the indexes were sampled at; the consumer's own loop clock
+     */
+    public report(partition: number, writeIndex: number, readIndex: number, now: number): void
     {
-        const lag = writeIndex - readIndex;
-        
+        // Clamped: after a Redis flush the write index restarts below the read index, and a negative backlog
+        // would corrupt the dashboards these figures feed. A regressed index also means no readable backlog.
+        const lag = Math.max(0, writeIndex - readIndex);
+
         const last = this._metricsTracker.get(partition);
-        let lastWriteIndex = writeIndex;
-        let lastReadIndex = readIndex;
-        if (last != null)
-        {
-            lastWriteIndex = last.writeIndex;
-            lastReadIndex = last.readIndex;
-        }
-        
+
+        // Rates need a usable baseline: a first report has none, a non-advancing clock would divide by zero,
+        // and a regressed index (flush, eviction, environment reset) would yield a huge negative rate. All
+        // three reset to 0 rather than reporting a fabricated figure.
+        const elapsedMs = last == null ? 0 : now - last.sampledAt;
+        const hasBaseline = last != null && elapsedMs > 0
+            && writeIndex >= last.writeIndex && readIndex >= last.readIndex;
+
+        // Two decimals rather than whole batches: a topic doing 20 events an hour is 0.33/min, which would
+        // round to 0 and read as a dead partition on the dashboard.
+        const perMinute = (delta: number): number => Math.round(delta / elapsedMs * oneMinuteMs * 100) / 100;
+
         this._metricsTracker.set(partition, {
             lag, writeIndex, readIndex,
-            productionRate: writeIndex - lastWriteIndex,
-            consumptionRate: readIndex - lastReadIndex
+            productionRate: hasBaseline ? perMinute(writeIndex - last.writeIndex) : 0,
+            consumptionRate: hasBaseline ? perMinute(readIndex - last.readIndex) : 0,
+            sampledAt: now
         });
     }
 

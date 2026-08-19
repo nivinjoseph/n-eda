@@ -575,6 +575,10 @@ Pass a `Container` to share one with the rest of your app; **you** must then boo
   case-insensitive duplicate name.
 - `usePartitionKeyMapper(func: (event: EdaEvent) => string): this` — override the partition key.
   **Callable once**; defaults to `event.partitionKey`.
+- `configureMetricsInterval(duration: Duration): this` — how often per-partition lag/throughput is
+  logged (see [docs/observability.md](docs/observability.md)). Defaults to one minute. One log line
+  per topic-partition per interval, so widen it to trade dashboard resolution for log cost. Must be
+  positive and at most 2^31-1 ms (~24.8 days).
 - `registerEventHandlers(...eventHandlerClasses): this` — throws if a class carries no `@event`/
   `@observedEvent`, if two handlers claim the same event type or observation key, or if two handler
   classes share a name.
@@ -606,7 +610,7 @@ Pass a `Container` to share one with the rest of your app; **you** must then boo
   Disposes the container even if it was supplied externally.
 
 **Getters** — `containerRegistry`, `serviceLocator`, `topics`, `distributedObserverTopic`, `eventMap`,
-`observerEventMap`, `consumerName`, `consumerGroupId`, `cleanKeys`, `partitionKeyMapper`,
+`observerEventMap`, `consumerName`, `consumerGroupId`, `cleanKeys`, `partitionKeyMapper`, `metricsInterval`,
 `awsLambdaDetails`, `awsLambdaProxyEnabled`, `isAwsLambdaConsumer`, `rpcDetails`, `rpcProxyEnabled`,
 `isRpcConsumer`, `grpcDetails`, `grpcProxyEnabled`, `isGrpcConsumer`.
 
@@ -840,6 +844,7 @@ consumer's dedupe tracking list. Use it to force reprocessing after a deliberate
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Redis key layout, the consume loop, delivery guarantees, tuning constants
 - [llms.txt](llms.txt) — condensed API guide and the rules the type system does not enforce
+- [docs/observability.md](docs/observability.md) — the partition metrics log contract and Datadog dashboard setup
 - [docs/known-issues.md](docs/known-issues.md) — known defects and their workarounds
 
 ## Contributing

@@ -14,6 +14,7 @@ import { Consumer } from "./consumer.js";
 import { DefaultProcessor } from "./default-processor.js";
 import { GrpcClientFactory } from "./grpc-client-factory.js";
 import { GrpcProxyProcessor } from "./grpc-proxy-processor.js";
+import { MetricsReporter } from "./metrics-reporter.js";
 import { Monitor } from "./monitor.js";
 import { Processor } from "./processor.js";
 import { RpcProxyProcessor } from "./rpc-proxy-processor.js";
@@ -32,11 +33,11 @@ import { DefaultEdaContext } from "../eda-context.js";
  *
  * On `consume()` it creates, for every topic that is neither disabled nor publish-only, one `Consumer` and
  * one `Processor` per owned partition — all partitions unless `Topic.configurePartitionAffinity` narrowed
- * the range — plus a `Broker` and a `Monitor`.
+ * the range — plus a `Broker` per topic, and process-wide a `Monitor` and a `MetricsReporter`.
  *
  * Note: this is the only path that populates `EdaContext`. If every registered topic is publish-only or
  * disabled while a subscription manager is registered, `consume()` throws, because the `Monitor` requires a
- * non-empty broker and consumer list.
+ * non-empty consumer list and the `MetricsReporter` a non-empty broker list.
  */
 @inject("EdaRedisClient", "Logger")
 export class RedisEventSubMgr implements EventSubMgr
@@ -44,7 +45,9 @@ export class RedisEventSubMgr implements EventSubMgr
     private readonly _client: Redis;
     private readonly _logger: Logger;
     private readonly _brokers = new Array<Broker>();
-    private _monitor: Monitor = null as any;
+    // Assigned only once consume() has run, so dispose() has to tolerate them being absent.
+    private _monitor: Monitor | null = null;
+    private _metricsReporter: MetricsReporter | null = null;
 
     private _isDisposing = false;
     private _isDisposed = false;
@@ -100,49 +103,81 @@ export class RedisEventSubMgr implements EventSubMgr
         {
             this._isConsuming = true;
 
-            const monitorConsumers = new Array<Consumer>();
-
-            this._manager.topics.forEach(topic =>
+            try
             {
-                if (topic.isDisabled || topic.publishOnly)
+                const monitorConsumers = new Array<Consumer>();
+
+                this._manager.topics.forEach(topic =>
+                {
+                    if (topic.isDisabled || topic.publishOnly)
+                        return;
+
+                    let partitions = topic.partitionAffinity ? [...topic.partitionAffinity] : null;
+                    if (partitions == null)
+                    {
+                        partitions = new Array<number>();
+                        for (let partition = 0; partition < topic.numPartitions; partition++)
+                            partitions.push(partition);
+                    }
+
+                    const consumers = partitions
+                        .map(partition =>
+                            new Consumer(this._client, this._manager, topic.name, partition, topic.isFlush));
+
+                    let processors: Array<Processor>;
+                    if (this._manager.awsLambdaProxyEnabled)
+                        processors = consumers.map(_ => new AwsLambdaProxyProcessor(this._manager));
+                    else if (this._manager.rpcProxyEnabled)
+                        processors = consumers.map(_ => new RpcProxyProcessor(this._manager));
+                    else if (this._manager.grpcProxyEnabled)
+                    {
+                        const grpcClientFactory = new GrpcClientFactory(this._manager);
+                        processors = consumers.map(_ => new GrpcProxyProcessor(this._manager, grpcClientFactory));
+                    }
+                    else
+                        processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
+
+                    const broker = new Broker(topic, consumers, processors);
+                    this._brokers.push(broker);
+
+                    monitorConsumers.push(...consumers);
+                    // const monitor = new Monitor(this._client, consumers, this._logger);
+                    // this._monitors.push(monitor);
+                });
+
+                // Assigned to the field before starting, so that a failed start still leaves the Monitor's
+                // duplicated connection reachable for the unwind below (and for dispose()).
+                this._monitor = new Monitor(this._client, monitorConsumers, this._logger);
+                await this._monitor.start();
+
+                // dispose() may have landed while start() was awaited; it saw _metricsReporter as null then,
+                // so a reporter created now would install a timer nothing ever clears. Stop instead.
+                if (this._isDisposing)
                     return;
 
-                let partitions = topic.partitionAffinity ? [...topic.partitionAffinity] : null;
-                if (partitions == null)
-                {
-                    partitions = new Array<number>();
-                    for (let partition = 0; partition < topic.numPartitions; partition++)
-                        partitions.push(partition);
-                }
+                this._metricsReporter = new MetricsReporter(this._brokers, this._logger, this._manager.metricsInterval);
+                this._metricsReporter.start();
 
-                const consumers = partitions
-                    .map(partition => new Consumer(this._client, this._manager, topic.name, partition, topic.isFlush));
+                this._brokers.forEach(t => t.initialize());
+            }
+            catch (error)
+            {
+                // Unwind fully so a caller that catches and retries consume() after a transient failure gets
+                // a real second attempt — otherwise the _isConsuming guard above would skip setup and leave
+                // the process sitting in the wait loop below, looking healthy while consuming nothing.
+                await Promise.all([
+                    this._monitor?.dispose(),
+                    this._metricsReporter?.dispose(),
+                    ...this._brokers.map(t => t.dispose())
+                ]).catch(e => console.error(e));
 
-                let processors: Array<Processor>;
-                if (this._manager.awsLambdaProxyEnabled)
-                    processors = consumers.map(_ => new AwsLambdaProxyProcessor(this._manager));
-                else if (this._manager.rpcProxyEnabled)
-                    processors = consumers.map(_ => new RpcProxyProcessor(this._manager));
-                else if (this._manager.grpcProxyEnabled)
-                {
-                    const grpcClientFactory = new GrpcClientFactory(this._manager);
-                    processors = consumers.map(_ => new GrpcProxyProcessor(this._manager, grpcClientFactory));
-                }
-                else
-                    processors = consumers.map(_ => new DefaultProcessor(this._manager, this.onEventReceived.bind(this)));
+                this._monitor = null;
+                this._metricsReporter = null;
+                this._brokers.length = 0;
+                this._isConsuming = false;
 
-                const broker = new Broker(topic, consumers, processors);
-                this._brokers.push(broker);
-
-                monitorConsumers.push(...consumers);
-                // const monitor = new Monitor(this._client, consumers, this._logger);
-                // this._monitors.push(monitor);
-            });
-
-            this._monitor = new Monitor(this._client, this._brokers, monitorConsumers, this._logger);
-            await this._monitor.start();
-
-            this._brokers.forEach(t => t.initialize());
+                throw error;
+            }
         }
 
         while (!this._isDisposed)
@@ -159,7 +194,10 @@ export class RedisEventSubMgr implements EventSubMgr
             console.warn("Disposing EventSubMgr");
             this._disposePromise = Promise.all([
                 // ...this._monitors.map(t => t.dispose()),
-                this._monitor.dispose(),
+                // Optional: both are only assigned once consume() has run, so disposing a manager that never
+                // started must not throw here.
+                this._monitor?.dispose(),
+                this._metricsReporter?.dispose(),
                 ...this._brokers.map(t => t.dispose())
             ])
                 .catch(e => console.error(e))

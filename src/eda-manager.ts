@@ -3,7 +3,7 @@ import { Container, Registry, ServiceLocator, ComponentInstaller } from "@nivinj
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { EventBus } from "./event-bus.js";
 import { EventSubMgr } from "./event-sub-mgr.js";
-import { ClassDefinition, Disposable } from "@nivinjoseph/n-util";
+import { ClassDefinition, Disposable, Duration } from "@nivinjoseph/n-util";
 import { EventRegistration } from "./event-registration.js";
 import { Topic } from "./topic.js";
 import { EdaEvent } from "./eda-event.js";
@@ -64,6 +64,7 @@ export class EdaManager implements Disposable
     // private readonly _wildKeys: Array<string>;
 
     // private _metricsEnabled = false;
+    private _metricsInterval = Duration.fromMinutes(1);
     private _partitionKeyMapper: (event: EdaEvent) => string = null as any;
     private _eventBusRegistered = false;
     private _eventSubMgrRegistered = false;
@@ -172,6 +173,12 @@ export class EdaManager implements Disposable
      */
     public get partitionKeyMapper(): (event: EdaEvent) => string { return this._partitionKeyMapper; }
     // public get metricsEnabled(): boolean { return this._metricsEnabled; }
+
+    /**
+     * How often the `MetricsReporter` logs per-partition lag and throughput. Defaults to one minute; see
+     * {@link EdaManager.configureMetricsInterval}.
+     */
+    public get metricsInterval(): Duration { return this._metricsInterval; }
 
 
     /**
@@ -290,6 +297,37 @@ export class EdaManager implements Disposable
 
     //     return this;
     // }
+
+    /**
+     * Overrides how often the `MetricsReporter` logs per-partition lag and throughput. Defaults to one
+     * minute.
+     *
+     * RULE: the reporter emits one log line **per topic-partition** per interval, so ingest volume is
+     * `topics × partitions` lines per interval. Widen this on a service owning many partitions to trade
+     * dashboard resolution for log cost.
+     *
+     * Note: consumers report to their `Broker` at half this interval, so on a healthy consume loop every
+     * logged line is at most one report old. A loop blocked mid-batch (e.g. a handler stuck in its retry
+     * ladder) pauses reporting for that partition — which the logged `sampleAgeMs` field exposes.
+     *
+     * @param duration - how long to wait between reporting ticks; greater than zero, at most ~24.8 days
+     * (Node's 2^31-1 ms timer maximum — beyond it `setInterval` clamps to 1ms and would flood the logs)
+     * @returns this manager, for chaining
+     * @throws if `duration` is missing, not positive, or over the timer maximum, or if called after
+     * `bootstrap()`
+     */
+    public configureMetricsInterval(duration: Duration): this
+    {
+        given(duration, "duration").ensureHasValue()
+            .ensure(t => t.toMilliSeconds() > 0, "must be greater than zero")
+            .ensure(t => t.toMilliSeconds() <= 2147483647,
+                "must not exceed 2^31-1 ms (~24.8 days), Node's timer maximum");
+        given(this, "this").ensure(t => !t._isBootstrapped, "invoking method after bootstrap");
+
+        this._metricsInterval = duration;
+
+        return this;
+    }
 
     /**
      * Overrides how an event's partition key is derived. Unset, `bootstrap()` installs

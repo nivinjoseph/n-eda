@@ -1,5 +1,5 @@
 import { given } from "@nivinjoseph/n-defensive";
-import { Delay, DelayCanceller, Deserializer, Disposable, Duration, Make } from "@nivinjoseph/n-util";
+import { Delay, DelayCanceller, Deserializer, Disposable, Make } from "@nivinjoseph/n-util";
 // import * as Redis from "redis";
 import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-exception";
 import { Logger } from "@nivinjoseph/n-log";
@@ -66,6 +66,9 @@ export class Consumer implements Disposable
     private _delayCanceller: DelayCanceller | null = null;
     
     private _lastReportTime = 0;
+    // Half the MetricsReporter's logging interval, so no logged line is ever more than one report stale.
+    // Immutable after bootstrap (configureMetricsInterval throws post-bootstrap), hence computed once.
+    private readonly _reportIntervalMs: number;
 
     private get _writeIndexKey(): string { return `${this.id}-write-index`; }
     private get _readIndexKey(): string { return `${this._fullId}-read-index`; }
@@ -93,6 +96,7 @@ export class Consumer implements Disposable
         this._partition = partition;
 
         this._cleanKeys = this._manager.cleanKeys;
+        this._reportIntervalMs = this._manager.metricsInterval.toMilliSeconds() / 2;
 
         given(flush, "flush").ensureHasValue().ensureIsBoolean();
         this._flush = flush;
@@ -164,9 +168,10 @@ export class Consumer implements Disposable
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
                 
                 const now = Date.now();
-                if ((now - this._lastReportTime) > Duration.fromMinutes(1).toMilliSeconds())
+                // report() is an in-memory map write, so the half-interval frequency costs nothing.
+                if ((now - this._lastReportTime) > this._reportIntervalMs)
                 {
-                    this._broker.report(this._partition, writeIndex, readIndex);
+                    this._broker.report(this._partition, writeIndex, readIndex, now);
                     this._lastReportTime = now;
                 }
 
@@ -184,7 +189,9 @@ export class Consumer implements Disposable
                 let upperBoundReadIndex = writeIndex;
                 if (depth > maxRead)
                 {
-                    upperBoundReadIndex = readIndex + maxRead - 1;
+                    // Inclusive window [readIndex + 1, readIndex + maxRead] = exactly maxRead slots; the
+                    // previous `+ maxRead - 1` read one slot short of the cap on every backlogged batch.
+                    upperBoundReadIndex = readIndex + maxRead;
                     await this._logger.logWarning(`Event queue depth for ${this.id} is ${depth}.`);
                 }
 

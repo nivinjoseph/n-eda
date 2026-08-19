@@ -208,8 +208,13 @@ export class Topic
 }
 
 /**
- * Per-partition throughput and lag figures reported by consumers to the `Broker` about once a minute, and
- * logged by the `Monitor`.
+ * Per-partition throughput and lag figures reported by consumers to the `Broker` at half the configured
+ * metrics interval, and logged by the `MetricsReporter`.
+ *
+ * RULE: the rates are normalized per minute, not raw deltas between samples. The reporter logs on its own
+ * timer, so it will re-log an entry that no consumer has refreshed since the previous tick; a rate survives
+ * that re-logging unchanged, whereas a raw delta would read as if the events had moved a second time.
+ * Compare `sampledAt` against the log line's own time to tell a fresh entry from a stale one.
  *
  * Note: internal telemetry type; not exported from the barrel.
  */
@@ -224,9 +229,22 @@ export interface TopicPartitionMetrics
     /** This consumer group's current offset into the partition. */
     readIndex: number;
 
-    /** Batches written per unit time, derived from successive write-index samples. */
+    /**
+     * Batches written per minute, derived from successive write-index samples. `0` when there is no usable
+     * baseline: a partition's first report, or an index that regressed (Redis flush/eviction). Carries two
+     * decimals, so a topic doing tens of events per hour still reports a non-zero rate instead of flooring
+     * to `0` on the dashboard.
+     */
     productionRate: number;
 
-    /** Batches consumed per unit time, derived from successive read-index samples. */
+    /** Batches consumed per minute, derived from successive read-index samples. `0` when there is no usable baseline. */
     consumptionRate: number;
+
+    /**
+     * Epoch milliseconds of the report that produced this entry — how fresh these figures are.
+     *
+     * RULE: not named `timestamp`. These figures are logged for ingestion by Datadog, where `timestamp` is a
+     * reserved attribute whose date remapper would treat it as the log event's own time.
+     */
+    sampledAt: number;
 }

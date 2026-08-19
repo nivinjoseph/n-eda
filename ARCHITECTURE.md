@@ -91,7 +91,10 @@ observe an allocated index whose payload has not landed yet — which is exactly
 `Consumer._beginConsume`, per (topic, partition, consumer group):
 
 1. `MGET` the write index and this group's read index together (same hash tag, so one round-trip).
-2. Report lag to the `Broker` at most once a minute.
+2. Report lag to the `Broker` at most once per half metrics interval (30 s by default) — but only
+   between batches, so a loop blocked in the handler retry ladder pauses reporting. The
+   `MetricsReporter` logs those figures one flat line per partition — see
+   [docs/observability.md](docs/observability.md).
 3. If `readIndex >= writeIndex`, sleep a jittered `randomInt(2500, 5000)` ms on a cancellable delay and
    loop. The `Monitor`, subscribed to the `-changed` channel, cancels that delay the instant a producer
    publishes — so steady-state latency is sub-millisecond and the 2.5–5 s figure is only a fallback.
@@ -302,7 +305,9 @@ All hardcoded; none are configurable at runtime.
 | `maxProcessAttempts = 10`, `(5+n)*n` s | `processor.ts` | handler retry ladder, 510 s total |
 | `retryWithExponentialBackoff(..., 5)` | `producer.ts` | 6 attempts each for `INCR` and `SETEX` |
 | `Duration.fromHours(1)` | `optimized-scheduler.ts` | empty-queue GC sweep |
-| `Duration.fromMinutes(1)` | `consumer.ts`, `monitor.ts` | lag report / metrics log cadence |
+| `Duration.fromMinutes(1)` default | `metrics-reporter.ts` | metrics log cadence; override with `configureMetricsInterval` |
+| half the metrics interval | `consumer.ts` | lag report cadence, derived so no logged line is more than one report stale |
+| `maxAcceptableLag = 1000` | `metrics-reporter.ts` | per-tick lag warning threshold |
 | `connectionPoolSize` default `50` | `grpc-client-factory.ts` | round-robin gRPC client pool |
 | `AbortSignal.timeout(60000)` | `rpc-proxy-processor.ts` | HTTP RPC timeout (gRPC has **no** deadline) |
 | 2 s dev / 10 s otherwise | `redis-event-bus.ts` | event bus dispose drain |

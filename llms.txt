@@ -197,6 +197,7 @@ await eventBus.subscribeToObservables(Customer, customerId, [
 20. **`EdaContext.topic` throws under the AWS Lambda, RPC, and gRPC consumers** — it is only populated on the in-process Redis consume path.
 21. **`EdaManager.dispose()` disposes the container even when you supplied it.** If you passed your own `Container`, expect it to be disposed — and note that you, not n-eda, must have bootstrapped it.
 22. **Run Redis with `maxmemory-policy noeviction`.** The write-index, read-index, and tracked-keys keys carry no TTL. Evicting the write index resets it to 0 while the read index stays high, which stops consumption permanently and silently.
+23. **`configureMetricsInterval(duration)` controls log cost, not just cadence.** A consuming process logs one flat JSON metrics line **per topic-partition per interval** (default 1 minute) for log-pipeline dashboards — volume is `topics × partitions` per interval, billed on ingest. Must be positive and at most 2^31-1 ms (~24.8 days, Node's timer maximum). Read it back via the `metricsInterval` getter; the log contract is specified in `docs/observability.md`.
 
 ## Reference implementation
 
@@ -204,6 +205,7 @@ await eventBus.subscribeToObservables(Customer, customerId, [
 - `test/eda.test.ts` — executable spec: publishes 10,000 events and asserts per-partition ordering against real Redis
 - `README.md` — concepts, full API reference, best practices
 - `ARCHITECTURE.md` — Redis key layout, consume loop, delivery guarantees, tuning constants
+- `docs/observability.md` — partition-metrics log contract and Datadog dashboard setup
 - `docs/known-issues.md` — known defects and workarounds
 
 When docs and code disagree, trust `test/`.
