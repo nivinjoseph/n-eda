@@ -590,9 +590,8 @@ export class EdaManager implements Disposable
      * Marks this process as the gRPC consumer that executes proxied events. Pair with a `GrpcServer` to host
      * the endpoint.
      *
-     * Note: unlike the Lambda and RPC paths, `bootstrap()` does **not** check this against a registered
-     * `EventSubMgr`, so an inconsistent configuration is accepted silently. `EdaContext.topic` is unavailable
-     * on this path.
+     * Note: mutually exclusive with registering an `EventSubMgr` or acting as a Lambda or RPC consumer;
+     * `bootstrap()` enforces that. `EdaContext.topic` is unavailable on this path.
      *
      * @param handler - the handler the gRPC server dispatches to
      * @returns this manager, for chaining
@@ -649,8 +648,9 @@ export class EdaManager implements Disposable
      * After this returns, every configuration method throws.
      *
      * @throws `ObjectDisposedException` if already disposed
-     * @throws if called twice, if no topic was registered, if no event bus was registered, if the manager is
-     * both an event subscriber and a Lambda or RPC consumer, or if it is both a Lambda and an RPC consumer
+     * @throws if called twice, if no topic was registered, or if no event bus was registered
+     * @throws if the consumer roles conflict — the event subscriber, AWS Lambda consumer, RPC consumer, and
+     * gRPC consumer roles are mutually exclusive, and every pair is checked
      */
     public async bootstrap(): Promise<void>
     {
@@ -667,7 +667,13 @@ export class EdaManager implements Disposable
             .ensure(t => !(t._eventSubMgrRegistered && t._isRpcConsumer),
                 "cannot be both event subscriber and rpc consumer")
             .ensure(t => !(t._isAwsLambdaConsumer && t._isRpcConsumer),
-                "cannot be both lambda consumer and rpc consumer");
+                "cannot be both lambda consumer and rpc consumer")
+            .ensure(t => !(t._eventSubMgrRegistered && t._isGrpcConsumer),
+                "cannot be both event subscriber and grpc consumer")
+            .ensure(t => !(t._isAwsLambdaConsumer && t._isGrpcConsumer),
+                "cannot be both lambda consumer and grpc consumer")
+            .ensure(t => !(t._isRpcConsumer && t._isGrpcConsumer),
+                "cannot be both rpc consumer and grpc consumer");
 
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (this._partitionKeyMapper == null)
@@ -739,7 +745,8 @@ export class EdaManager implements Disposable
     public mapToPartition(topic: string, event: EdaEvent): number
     {
         given(topic, "topic").ensureHasValue().ensureIsString()
-            .ensure(t => this._topicMap.has(t));
+            .ensure(t => this._topicMap.has(t),
+                "must be a registered topic name, matched case-sensitively, and is only resolvable after bootstrap");
         given(event, "event").ensureHasValue().ensureIsObject();
 
         if (this._isDisposed)

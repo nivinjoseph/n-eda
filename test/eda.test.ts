@@ -99,6 +99,21 @@ await describe("eda tests", async () =>
         // Assert.deepStrictEqual(historyNumbers, numbers, "numbers don't match");
     });
 
+    await test("mapToPartition reports why a topic lookup failed", async () =>
+    {
+        const event = new TestEvent({ id: "casing_1-evt_0" });
+
+        // the registered name resolves
+        assert.strictEqual(typeof edaManager.mapToPartition("basic", event), "number");
+
+        // a casing mismatch does not — and the failure must say so, since registerTopics compares
+        // names case-insensitively while the topic map is keyed by exact name
+        assert.throws(() => edaManager.mapToPartition("BASIC", event), /registered topic name/);
+
+        // an entirely unknown topic hits the same assertion
+        assert.throws(() => edaManager.mapToPartition("nope", event), /registered topic name/);
+    });
+
     // test("ordering", async () =>
     // {
 

@@ -73,9 +73,8 @@ export interface EventBus extends Disposable
  * Identifies one observable instance and one event type on it, for
  * {@link EventBus.subscribeToObservables}.
  *
- * RULE: pass **class references**, not strings. The type permits `string` and the Redis key generator
- * handles it, but `subscribeToObservables` calls `getTypeName()` unconditionally when building the
- * observation key — a string yields `"String"`, so the lookup always misses and throws.
+ * Contract: `observableType` must resolve to the same type name as the published event's `refType`, and
+ * `observableId` to its `refId` — that pairing is what the fan-out matches subscribers against.
  */
 export type ObservableWatch = {
     /** The class of the entity emitting the event — must match the event's `refType`. */

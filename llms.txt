@@ -195,9 +195,8 @@ await eventBus.subscribeToObservables(Customer, customerId, [
 18. **The topic string in `publish(topic, ...)` must exactly match a registered `Topic.name`** — the lookup is case-sensitive even though duplicate detection is not.
 19. **All configuration must precede `bootstrap()`.** Every `use*`/`register*`/`proxyTo*`/`actAs*` method throws `invoking method after bootstrap` afterwards.
 20. **`EdaContext.topic` throws under the AWS Lambda, RPC, and gRPC consumers** — it is only populated on the in-process Redis consume path.
-21. **In `ObservableWatch`, pass class references, not strings.** The type allows `string`, but `subscribeToObservables` calls `getTypeName()` unconditionally, so a string yields `"String"` and always throws.
-22. **`EdaManager.dispose()` disposes the container even when you supplied it.** If you passed your own `Container`, expect it to be disposed — and note that you, not n-eda, must have bootstrapped it.
-23. **Run Redis with `maxmemory-policy noeviction`.** The write-index, read-index, and tracked-keys keys carry no TTL. Evicting the write index resets it to 0 while the read index stays high, which stops consumption permanently and silently.
+21. **`EdaManager.dispose()` disposes the container even when you supplied it.** If you passed your own `Container`, expect it to be disposed — and note that you, not n-eda, must have bootstrapped it.
+22. **Run Redis with `maxmemory-policy noeviction`.** The write-index, read-index, and tracked-keys keys carry no TTL. Evicting the write index resets it to 0 while the read index stays high, which stops consumption permanently and silently.
 
 ## Reference implementation
 

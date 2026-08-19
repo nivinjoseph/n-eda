@@ -476,10 +476,6 @@ For this to work, the observable's event must set `refType` to the observable ty
 and `refId` to that instance's id. Subscribing without a matching registered handler throws
 `No handler registered for observation key '...'`.
 
-> Pass **class references**, not strings, in `ObservableWatch`. The type permits strings, but
-> `subscribeToObservables` calls `getTypeName()` on the value unconditionally, so a string yields the
-> wrong key and always throws.
-
 > The observer fan-out runs inside `publish()` *after* the normal partition-mapping step, and
 > `publish()` returns early when that step produced nothing. A pure-publisher service will not notify
 > remote observers unless the topic is `.forcePublish()`ed.
@@ -539,6 +535,10 @@ OpenTelemetry SDK configured in your process.
 events, handlers, installer, and a fully configured `EdaManager` — and
 [`test/eda.test.ts`](test/eda.test.ts) exercises it end to end against a real Redis, asserting
 per-partition ordering across 10,000 events.
+
+For the distributed observer, [`test/utils/observer-test-utils.ts`](test/utils/observer-test-utils.ts) and
+[`test/observer.test.ts`](test/observer.test.ts) show the three-decorator handler, `subscribeToObservables`,
+and the full fan-out → notify → unwrap → handler path.
 
 **When this README and the tests disagree, trust the tests.**
 
@@ -688,7 +688,7 @@ export type ObservableWatch = {
 };
 ```
 
-Pass class references. The string form is accepted by the type but not handled correctly at runtime.
+`observableType` must name the same type as the published event's `refType`, and `observableId` its `refId`.
 
 ### `EventSubMgr`
 
