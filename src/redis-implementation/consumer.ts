@@ -36,6 +36,12 @@ import { NedaDistributedObserverNotifyEvent } from "./neda-distributed-observer-
  * persisted as a Redis list and reloaded at startup. Events whose handler registration is missing are marked
  * processed and skipped — deliberate, so a rolling deployment does not stall.
  *
+ * Duplicate suppression has two layers. An id that has finished is in the tracked set; an id that has been
+ * dispatched and not yet finished is in the in-flight map. A copy of either is not dispatched again, which
+ * covers a second copy in the same read window and a window that is re-read after an error. Finished ids are
+ * written to Redis as they finish, one write at a time, and once more when the loop exits — so a hard kill
+ * replays only what was in flight or finished within one Redis round trip, not the whole open window.
+ *
  * Note: a slot whose payload has not landed yet is retried up to 200 times (≈42 s) — this absorbs the race
  * between the producer's `INCR` and its `SETEX`, which are separate round-trips.
  */
@@ -60,6 +66,20 @@ export class Consumer implements Disposable
     private _trackedKeysArray = new Array<string>();
     private _trackedKeysSet = new Set<string>();
     private _keysToTrack = new Array<string>();
+    // Ids that have been dispatched and have not settled yet, each with the promise of that dispatch.
+    private readonly _inFlight = new Map<string, Promise<void>>();
+    // The write of tracked ids to Redis that is currently running, if any. Only one runs at a time.
+    private _savePromise: Promise<void> | null = null;
+    // Where each NedaClearTrackedKeysEvent applied in the window currently being read sits: its slot and its
+    // place within that slot. Emptied when that window completes, and whenever the read index turns out not
+    // to be where this consumer left it.
+    private readonly _clearsAppliedInWindow = new Set<string>();
+    // The read index as this consumer last knew it: the value it last fetched, or the one it has written
+    // itself since.
+    private _knownReadIndex: number | null = null;
+    // Ids that finished while a NedaClearTrackedKeysEvent was being applied, held back until it is done.
+    // Non-null only for the duration of that clear.
+    private _tracksHeldForClear: Array<string> | null = null;
 
     private _consumePromise: Promise<void> | null = null;
     private _broker: Broker = null as any;
@@ -151,6 +171,41 @@ export class Consumer implements Disposable
         await this._loadTrackedKeys();
         await this._logger.logInfo(`Loaded tracked keys for Consumer ${this.id} => ${this._trackedKeysSet.size}`);
 
+        try
+        {
+            await this._runConsumeLoop();
+        }
+        finally
+        {
+            await this._settleInFlightAndSave();
+        }
+    }
+
+    /**
+     * The last thing the consumer does, whichever way the loop was left.
+     *
+     * The loop returns as soon as it notices disposal, which can be while it is still reading a window's
+     * slots — before it has awaited the events it dispatched or saved any ids. Those events are still
+     * running at that point, so this waits for them to settle and then writes whatever they tracked.
+     * `dispose()` awaits the consume promise, so it resolves only after that write.
+     */
+    private async _settleInFlightAndSave(): Promise<void>
+    {
+        await Promise.allSettled([...this._inFlight.values()]);
+
+        try
+        {
+            await this._saveTrackedKeys();
+        }
+        catch (error: any)
+        {
+            await this._logger.logWarning(`Failed to save tracked keys while stopping consumer ${this.id}`);
+            await this._logger.logError(error);
+        }
+    }
+
+    private async _runConsumeLoop(): Promise<void>
+    {
         const maxReadAttempts = 200;
         const failedReadShortDelayMs = 100;
         const failedReadLongDelayMs = 250;
@@ -169,7 +224,17 @@ export class Consumer implements Disposable
                 // const readIndex = await this._fetchConsumerPartitionReadIndex();
 
                 const [writeIndex, readIndex] = await this._fetchPartitionWriteAndConsumerPartitionReadIndexes();
-                
+
+                // The record of applied clears is only meant for a window being read again from where this
+                // consumer left it. If the read index is anywhere else it was moved by someone else — an
+                // operator rewinding or skipping, or Redis being reset — so what follows is a replay or a
+                // different window, and a clear found in it is to be applied.
+                if (readIndex !== this._knownReadIndex)
+                {
+                    this._clearsAppliedInWindow.clear();
+                    this._knownReadIndex = readIndex;
+                }
+
                 const now = Date.now();
                 // report() is an in-memory map write, so the half-interval frequency costs nothing.
                 if ((now - this._lastReportTime) > this._reportIntervalMs)
@@ -259,7 +324,7 @@ export class Consumer implements Disposable
                     }
 
                     const events = await this._decompressEvents(eventData);
-                    for (const event of events)
+                    for (const [position, event] of events.entries())
                     {
                         // const eventId = (<any>event).$id || (<any>event).id; // for compatibility with n-domain DomainEvent
                         // if (this._trackedKeysSet.has(eventId))
@@ -272,10 +337,31 @@ export class Consumer implements Disposable
                         if (this._trackedKeysSet.has(eventId))
                             continue;
 
+                        // Dispatched already and still running: either a second copy in this window, or
+                        // this window being read again after an error. Wait on the original dispatch rather
+                        // than starting another, so the read index still cannot advance past it.
+                        const inFlight = this._inFlight.get(eventId);
+                        if (inFlight != null)
+                        {
+                            routed.push(inFlight);
+                            continue;
+                        }
+
                         if (deserializedEvent.name === this._nedaClearTrackedKeysEventName)
                         {
+                            // A clear is applied once while its window is being read. The clear event itself
+                            // is never tracked, so without this a window read again after an error would
+                            // apply it again and wipe the ids of events that have finished since — letting
+                            // them be dispatched again. Remembered by where the clear sits rather than by
+                            // its id: a re-read finds it in the same place, while a second clear is applied
+                            // even if it is in the same slot or reuses the first one's id.
+                            const clearPosition = `${item.index}:${position}`;
+                            if (this._clearsAppliedInWindow.has(clearPosition))
+                                continue;
+
                             await this._logger.logWarning(`NedaClearTrackedKeysEvent (${this._fullId}) --- clearing all event tracking data`);
                             await this._clearAllEventTracking();
+                            this._clearsAppliedInWindow.add(clearPosition);
                             await this._logger.logWarning(`NedaClearTrackedKeysEvent (${this._fullId}) --- event tracking data cleared`);
                             continue;
                         }
@@ -302,14 +388,33 @@ export class Consumer implements Disposable
                             continue;
                         }
 
-                        routed.push(
-                            this._attemptRoute(
-                                eventName, eventRegistration, item.index,
-                                item.key, eventId, event, deserializedEvent));
+                        // One chain: the promise that removes the entry is the one stored and awaited.
+                        const route = this._attemptRoute(
+                            eventName, eventRegistration, item.index,
+                            item.key, eventId, event, deserializedEvent)
+                            .finally(() => this._inFlight.delete(eventId));
+
+                        // A route rejects only if `_attemptRoute` throws before its `try` — while it builds
+                        // the receive span, which is where it reads `event.partitionKey` — and it does so
+                        // the moment it is called. (A throw inside that `try`, such as from a custom
+                        // partition key mapper, does not reject the route: it is caught there, and the
+                        // event is tracked and skipped.) `Promise.all(routed)` below is what acts on a
+                        // rejection, but the loop may still be reading later slots, or may throw or return
+                        // before it gets there. Observing the rejection here keeps it from being reported
+                        // as unhandled, which would take the whole process down; `route` itself still
+                        // rejects, so the window still fails and is retried.
+                        route.catch(() => { /* acted on through `routed` */ });
+
+                        this._inFlight.set(eventId, route);
+                        routed.push(route);
                     }
                 }
 
                 await Promise.all(routed);
+
+                // Normally empty by now. It is not when this window was re-read after an error and a slot
+                // holding a still-running event could no longer be read, leaving that event out of `routed`.
+                await Promise.allSettled([...this._inFlight.values()]);
 
                 await this._saveTrackedKeys();
 
@@ -318,6 +423,13 @@ export class Consumer implements Disposable
                     return;
 
                 await this._incrementConsumerPartitionReadIndex(upperBoundReadIndex);
+
+                // The window is complete, so its slots will not be re-read and its clears can be forgotten.
+                // A clear replayed later, after a deliberate rewind of the read index, is applied again:
+                // either because it was forgotten here, or — if its window never completed — because the
+                // next fetch finds the read index somewhere other than where this consumer left it.
+                this._clearsAppliedInWindow.clear();
+
                 if (this._cleanKeys)
                     await this._removeKeys(eventDataKeys);
             }
@@ -460,6 +572,12 @@ export class Consumer implements Disposable
         });
     }
 
+    /**
+     * Moves this group's read index: to `index` when given, otherwise forward by one.
+     *
+     * Either way `_knownReadIndex` follows, so that the next fetch does not mistake this consumer's own
+     * write for someone else having moved the index.
+     */
     private _incrementConsumerPartitionReadIndex(index?: number): Promise<void>
     {
         if (index != null)
@@ -474,6 +592,7 @@ export class Consumer implements Disposable
                         return;
                     }
 
+                    this._knownReadIndex = index;
                     resolve();
                 }).catch(e => reject(e));
             });
@@ -481,7 +600,7 @@ export class Consumer implements Disposable
 
         return new Promise((resolve, reject) =>
         {
-            this._client.incr(this._readIndexKey, (err) =>
+            this._client.incr(this._readIndexKey, (err, value) =>
             {
                 if (err)
                 {
@@ -489,6 +608,7 @@ export class Consumer implements Disposable
                     return;
                 }
 
+                this._knownReadIndex = value!;
                 resolve();
             }).catch(e => reject(e));
         });
@@ -545,43 +665,22 @@ export class Consumer implements Disposable
 
     private async _clearAllEventTracking(): Promise<void>
     {
-        await new Promise<void>((resolve, reject) =>
+        // No save may be running when the delete is sent, or it could write to the list after the list has
+        // been deleted. A loop rather than a single await: while the last save is being awaited, an event
+        // can finish and start the next one.
+        while (this._savePromise != null)
+            await this._savePromise.catch(() => { /* logged where it was started */ });
+
+        // From here until the clear is done, ids that finish are held back instead of being tracked (see
+        // `_track`). There is no await between the loop above and this line, nor between this line and the
+        // delete being sent, so no id can be tracked, and no save can start, in between.
+        this._tracksHeldForClear = new Array<string>();
+
+        try
         {
-            this._client.unlink(this._trackedKeysKey, (err) =>
-            {
-                if (err)
-                {
-                    reject(err);
-                    return;
-                }
-
-                resolve();
-            }).catch(e => reject(e));
-        });
-
-
-        this._trackedKeysSet = new Set<string>();
-        this._trackedKeysArray = new Array<string>();
-        this._keysToTrack = new Array<string>();
-    }
-
-    private _track(eventKey: string): void
-    {
-        this._trackedKeysSet.add(eventKey);
-        this._trackedKeysArray.push(eventKey);
-        this._keysToTrack.push(eventKey);
-    }
-
-    private async _saveTrackedKeys(): Promise<void>
-    {
-        if (this._keysToTrack.isNotEmpty)
-        {
-            if (this._isDisposed)
-                await this._logger.logInfo(`Saving ${this._keysToTrack.length} tracked keys in ${this.id}`);
-
             await new Promise<void>((resolve, reject) =>
             {
-                this._client.lpush(this._trackedKeysKey, ...this._keysToTrack, (err) =>
+                this._client.unlink(this._trackedKeysKey, (err) =>
                 {
                     if (err)
                     {
@@ -593,11 +692,129 @@ export class Consumer implements Disposable
                 }).catch(e => reject(e));
             });
 
-            if (this._isDisposed)
-                await this._logger.logInfo(`Saved ${this._keysToTrack.length} tracked keys in ${this.id}`);
-
+            // Reset only once the delete has succeeded. If it fails, the window is read again with the
+            // tracked set intact, so events that already finished in it are still recognized while the
+            // clear is retried.
+            this._trackedKeysSet = new Set<string>();
+            this._trackedKeysArray = new Array<string>();
             this._keysToTrack = new Array<string>();
         }
+        finally
+        {
+            // Whether the clear went through or not, the ids that finished while it was being applied are
+            // tracked now: after the reset if there was one, so memory and Redis both keep them.
+            const held = this._tracksHeldForClear;
+            this._tracksHeldForClear = null;
+            held.forEach(t => this._track(t));
+        }
+    }
+
+    private _track(eventKey: string): void
+    {
+        // A clear is being applied. An id that finishes now must not be added to a set that is about to be
+        // reset, nor written to a list that is about to be, or has just been, deleted — the two would then
+        // disagree about it. It is held back and tracked as soon as the clear is done.
+        if (this._tracksHeldForClear != null)
+        {
+            this._tracksHeldForClear.push(eventKey);
+            return;
+        }
+
+        this._trackedKeysSet.add(eventKey);
+        this._trackedKeysArray.push(eventKey);
+        this._keysToTrack.push(eventKey);
+
+        // Written as soon as it is tracked rather than at the end of the window, so a hard kill loses at
+        // most the ids tracked during one Redis round trip. A write that is already running picks this id
+        // up on its next pass, so only start one — and log its failure once — when none is. A failure is
+        // only logged: the ids stay pending and the end-of-window save retries them, failing the window if
+        // it cannot write them either. Nothing awaits this promise, so the logging is itself guarded: a
+        // logger that rejects or throws would otherwise surface as an unhandled rejection and end the process.
+        if (this._savePromise == null)
+            this._savePendingTrackedKeys()
+                .catch(e => this._logger.logError(e))
+                .catch(() => { /* the logger failed as well, and there is nowhere left to report that */ });
+    }
+
+    /**
+     * Writes the pending tracked ids to Redis, or joins the write that is already doing so.
+     *
+     * Only one write runs at a time. It loops until nothing is pending, so ids tracked while it is running
+     * go out in its next `LPUSH` — at a low event rate that is one write per event, and under load the
+     * writes batch themselves. Running them one at a time also keeps the list in tracking order, which the
+     * trim to the newest 1000 relies on.
+     */
+    private _savePendingTrackedKeys(): Promise<void>
+    {
+        if (this._savePromise != null)
+            return this._savePromise;
+
+        if (this._keysToTrack.isEmpty)
+            return Promise.resolve();
+
+        this._savePromise = this._pushPendingTrackedKeys();
+        return this._savePromise;
+    }
+
+    private async _pushPendingTrackedKeys(): Promise<void>
+    {
+        try
+        {
+            while (this._keysToTrack.isNotEmpty)
+            {
+                // Taken before the await, so ids tracked while this write is in flight are neither sent
+                // twice nor discarded when it completes.
+                const keys = this._keysToTrack;
+                this._keysToTrack = new Array<string>();
+
+                try
+                {
+                    await new Promise<void>((resolve, reject) =>
+                    {
+                        this._client.lpush(this._trackedKeysKey, ...keys, (err) =>
+                        {
+                            if (err)
+                            {
+                                reject(err);
+                                return;
+                            }
+
+                            resolve();
+                        }).catch(e => reject(e));
+                    });
+                }
+                catch (error)
+                {
+                    // Put back ahead of anything tracked meanwhile, so a retry writes them in order.
+                    this._keysToTrack = [...keys, ...this._keysToTrack];
+                    throw error;
+                }
+            }
+        }
+        finally
+        {
+            // Cleared here, in the same step as the loop's exit check, so that an id tracked immediately
+            // afterwards starts a new write instead of joining one that has already finished looking.
+            this._savePromise = null;
+        }
+    }
+
+    private async _saveTrackedKeys(): Promise<void>
+    {
+        // A background write may be running or may have failed and left its ids pending. Wait it out, then
+        // write whatever is left; unlike the background write, a failure here propagates to the caller.
+        await this._savePromise?.catch(() => { /* logged where it was started; retried below */ });
+
+        // Counted after the background write has settled, so the two log lines report what this call writes.
+        const numPending = this._keysToTrack.length;
+
+        if (numPending > 0 && this._isDisposed)
+            await this._logger.logInfo(`Saving ${numPending} tracked keys in ${this.id}`);
+
+        await this._savePendingTrackedKeys();
+
+        if (numPending > 0 && this._isDisposed)
+            await this._logger.logInfo(`Saved ${numPending} tracked keys in ${this.id}`);
 
         if (this._isDisposed)
             return;

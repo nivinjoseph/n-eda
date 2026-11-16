@@ -121,16 +121,33 @@ if (depth > maxRead)
    250 ms) — worst case ≈ 42 s for a single missing slot. On give-up: log, advance the read index by
    one, continue.
 8. `inflateRaw` → `JSON.parse` → `Deserializer.deserialize` each event.
-9. Skip any event id already in the tracked-keys set.
+9. Skip any event id already in the tracked-keys set. If the id has been dispatched and is still running
+   — a second copy in the same window, or this window being read again after an error — wait on that
+   dispatch instead of starting another.
 10. Resolve the handler registration. For the distributed-observer wrapper this means rebuilding the
     observation key from the wrapper's `observerTypeName` plus the inner event's `refType` and `name`.
     **If no registration matches, the event is marked processed and skipped** — this is deliberate, so a
     rolling deployment where one replica does not yet know an event type does not stall.
 11. Route every event in the batch **concurrently**, then `await Promise.all(...)`.
-12. Save tracked keys, advance the read index to the window's upper bound, and — if `cleanUpKeys()` was
-    configured — `UNLINK` the payload keys.
+12. Write any tracked ids not yet saved, trim the list, advance the read index to the window's upper
+    bound, and — if `cleanUpKeys()` was configured — `UNLINK` the payload keys.
 
-Any throw in the loop body logs, sleeps 5 s, and retries **without advancing the read index**.
+Tracked ids do not wait for step 12. Each id is written to the Redis list as its event finishes, by a
+single writer per consumer: the first finished id starts an `LPUSH`, and ids that finish while it is in
+flight go out together in the next one. At a low event rate that is one write per event; under load the
+writes batch themselves.
+
+Any throw in the loop body logs, sleeps 5 s, and retries **without advancing the read index**. Events
+dispatched before the throw keep running, and the re-read waits on them (step 9). A
+`NedaClearTrackedKeysEvent` is applied once while its window is being read, so a re-read skips it instead
+of wiping the ids of events that finished after it. The consumer forgets that when the window completes,
+and whenever it finds the read index somewhere other than where it left it, so a clear replayed after a
+read-index rewind is applied again. While a clear is being applied, the ids of events that finish are held
+back and tracked once it is done, so those events survive it.
+
+When the loop exits — it returns as soon as it notices disposal, which can be partway through a window —
+the consumer waits for every event it dispatched to settle and writes their ids before `dispose()`
+resolves.
 
 ## Dispatch: route → schedule → process
 
@@ -174,6 +191,14 @@ The dedupe window is the tracked-keys list: last **1000 event ids** per (topic, 
 group), trimmed from 3000 down to 1000 whenever it grows past the ceiling. Anything older than that
 window will be re-delivered if the read index ever rewinds. **Handlers must be idempotent.**
 
+The dedupe compares event `id`s and nothing else, and the publisher chooses them. A second publish of the
+same logical event is suppressed only if it carries the same `id` and the same partition key as the first
+— so ids must be **deterministic**: the same on every retry, and derived from the triggering event's id
+when an event is published from a handler. An id generated afresh on each attempt (a timestamp, a new
+UUID per `publish` call) makes every retry look like a new event. The set also records ids that were
+*seen*, not ids that succeeded: an event dropped after retry exhaustion is tracked, so republishing it
+under the same id within the window is suppressed too.
+
 Handler failures retry inside the processor:
 
 ```typescript
@@ -188,16 +213,19 @@ const seconds = (5 + numProcessAttempts) * numProcessAttempts;   // [6, 14, 24, 
 | Handler throws once | Retried after 6 s, same processor, same event object. |
 | Handler always throws | 10 attempts over ~8.5 min, then logged and **dropped**. No dead-letter queue. |
 | Does a poison event block the partition? | **Yes, for ~8.5 min.** The consumer awaits the whole batch before advancing the read index, and the partition key stays locked in `_processing` throughout. Not forever, but long. |
-| Crash mid-batch | The read index never advanced, so the batch replays. Tracked keys suppress the duplicates within the 1000-event window. |
-| Broker disposed mid-flight | `ObjectDisposedException` → the event is deliberately **not** tracked, so it replays on restart. This is the graceful-shutdown path. |
+| Crash mid-batch | The read index never advanced, so the batch replays. Events whose ids had reached Redis are suppressed. Ids are written as events finish, so what runs again is whatever was in flight, plus anything that finished within the last Redis round trip. |
+| Broker disposed mid-flight | `ObjectDisposedException` → the event is deliberately **not** tracked, so it replays on restart. This is the graceful-shutdown path. Events that did finish are tracked, and their ids are saved before `dispose()` resolves. |
+| `partitionKey` getter throws on the consuming side | The consumer reads `event.partitionKey` when it creates the receive span, before it hands the event to the broker. The dispatch rejects and the window fails: it is logged and retried every 5 s without advancing the read index, so the partition is stalled until the event can be dispatched. The process is not brought down. |
+| Custom partition key mapper throws on the consuming side | A different path. The function given to `usePartitionKeyMapper` is called inside the dispatch's own error handling, so its error is recorded on the receive span and nowhere else: nothing is logged, and the event is marked processed and skipped. |
 
-Five paths degrade to **at-most-once** — the event is skipped and the read index advances:
+Six paths degrade to **at-most-once** — the event is skipped and the read index advances:
 
 1. Retry exhaustion (10 failed attempts).
 2. No handler registration for the event name (rolling deploy).
 3. `Topic.flushConsume()`.
 4. Read-retry exhaustion (200 attempts, payload never appeared).
 5. TTL expiry before the consumer got there.
+6. A custom partition key mapper that throws on the consuming side (silent: see the table above).
 
 > **A consumer group offline longer than the topic TTL crawls rather than skips.** Every expired slot
 > costs the full 200-attempt ladder — roughly 42 seconds — before the consumer gives up and advances a

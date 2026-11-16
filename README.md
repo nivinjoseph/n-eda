@@ -272,7 +272,7 @@ Every event implements `EdaEvent`, which requires five getters:
 
 | Member | Serialized? | Purpose |
 |---|---|---|
-| `id` | **yes** | Unique event id. Used for deduplication. |
+| `id` | **yes** | Unique event id. Used for deduplication, so it must be the same on every retry. |
 | `name` | **yes** | The event type name. Used to route to a handler. |
 | `partitionKey` | no | Ordering and partition assignment key. |
 | `refId` | no | Id of the emitting instance (distributed observer). |
@@ -374,6 +374,18 @@ new Topic("orders", Duration.fromHours(4), 100).subscribe().configurePartitionAf
 
 Delivery is **at-least-once**, with a rolling dedupe window of the last **1000 event ids** per
 (topic, partition, consumer group). Design handlers to be idempotent.
+
+The dedupe compares event `id`s only, so a repeat is recognized only if it carries the same id. Make ids
+deterministic: the same on every retry, and derived from the triggering event's id when you publish from
+a handler.
+
+```typescript
+// a re-run of this handler publishes the same id, so the repeat is suppressed downstream
+await this._eventBus.publish("shipping", new ShipmentRequestedEvent({ id: `shipment_${event.id}`, orderId }));
+
+// a re-run publishes a different id every time, so nothing can recognize it as a repeat
+await this._eventBus.publish("shipping", new ShipmentRequestedEvent({ id: `shipment_${Date.now()}`, orderId }));
+```
 
 A failing handler is retried **10 times** with an escalating delay of `(5 + n) * n` seconds —
 `6, 14, 24, 36, 50, 66, 84, 104, 126` — roughly **8.5 minutes** in total. After the last attempt the
@@ -820,8 +832,10 @@ consumer's dedupe tracking list. Use it to force reprocessing after a deliberate
 
 ## Best Practices
 
-1. **Make handlers idempotent.** Delivery is at-least-once and the dedupe window is only 1000 events
-   per partition per group.
+1. **Make handlers idempotent, and event ids deterministic.** Delivery is at-least-once and the dedupe
+   window is only 1000 events per partition per group. The dedupe matches on `id`, so an event published
+   from a handler should derive its id from the triggering event's id, never from a timestamp or a value
+   generated at publish time.
 2. **Choose `partitionKey` as your consistency boundary.** It is the unit of ordering and of
    concurrency; an aggregate id is usually the right answer.
 3. **Set `numPartitions` generously up front.** It caps concurrency for the topic and cannot be changed

@@ -181,6 +181,64 @@ separate cleanup, not a bug fix.
 
 # Fixed
 
+## A single consumer could dispatch the same event id twice
+
+Three gaps in the consumer's duplicate suppression, all in `consumer.ts`, all with one consumer process:
+
+- **Two copies in one read window.** An id entered the tracked set only when its handler finished, but
+  the check ran when the window was read, so both copies were dispatched.
+- **A window re-read after an error.** A throw in the loop body backs off 5 s and reads the same window
+  again. Events dispatched before the throw and still running were not in the tracked set, so they were
+  dispatched a second time.
+- **Ids saved once per window.** The Redis list was written only after every event in the window had
+  settled, so a hard kill lost every id finished in the open window. A graceful stop lost them too when it
+  landed while the consumer was still reading the window's slots.
+
+The consumer now also remembers ids that are in flight and waits on the original dispatch instead of
+starting another; writes each id to Redis as its event finishes; and, on any exit from the loop, waits for
+dispatched events to settle and saves their ids before `dispose()` resolves. Covered by
+`test/dedupe.test.ts`.
+
+Delivery is still at-least-once. A crash after a handler finishes and before its id reaches Redis replays
+that event, and a handler retried after a partial run repeats its side effects.
+
+## A clear event was re-applied every time its window was re-read
+
+`NedaClearTrackedKeysEvent` is never tracked, so when a later slot in its window made the consume loop
+throw, each re-read applied the clear again and wiped the ids of events that had finished in the meantime.
+Those events were then dispatched again on the following re-read, and this repeated for as long as the
+window kept failing.
+
+While a window is being read, the consumer now remembers where each clear it has applied sits (its slot
+and its place within the slot) and skips a clear it finds there again. It forgets them when the window
+completes, and whenever it finds the read index somewhere other than where it left it. Every clear in a
+window is applied, including several in one slot and clears that reuse an id. A republished clear, and a
+clear replayed after the read index is rewound — even while its window is stuck — are applied as usual.
+The memory is per process, so a clear in a window that never completed is applied once more after a
+restart.
+
+Ids of events that finish while a clear is being applied are held back and tracked once it is done,
+whether it went through or failed. Such an event therefore survives the clear, and memory and Redis agree
+about it. Before, its id was wiped along with the rest.
+
+One case remains: an event ahead of the clear in the same window, which finished before the clear was
+applied, has had its id wiped by that clear and is dispatched once more if the window is re-read.
+
+Covered by `test/dedupe.test.ts`.
+
+## A dispatch that rejected could take the process down
+
+The consumer reads an event's `partitionKey` before handing it to the broker. If that getter throws on the
+consuming side — a key derived from a field the wire payload does not carry, for example — the dispatch
+rejects at once. The consume loop only acts on that rejection after it has read the rest of the window, so
+whenever another slot followed, the rejection sat unobserved and Node reported it as an unhandled
+rejection, which by default ends the process and with it every partition the process owns.
+
+The consumer now observes the rejection where the dispatch is made. The window still fails: it is logged,
+and retried every 5 seconds without advancing the read index, so that partition is stalled until the event
+can be dispatched — the same outcome a rejection in the last slot of a window already had. Covered by
+`test/dedupe.test.ts`.
+
 ## `bootstrap()` had no gRPC mutual-exclusion guards
 
 `eda-manager.ts` cross-checked subscriber/Lambda, subscriber/RPC, and Lambda/RPC, but nothing involving

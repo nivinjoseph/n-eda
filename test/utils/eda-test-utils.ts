@@ -171,7 +171,9 @@ class TestEventHandler implements EdaEventHandler<TestEvent>
 
         const message = `Event '${event.name}' with id '${event.id}'.`;
 
-        await this._eventBus.publish("analytic", new AnalyticEvent({ id: `analytic_${event.id}_${Date.now()}`, message }));
+        // The id is derived from the triggering event's id alone, so if this handler runs again for the same
+        // event it publishes the same id and the consumer's dedupe can recognize the repeat.
+        await this._eventBus.publish("analytic", new AnalyticEvent({ id: `analytic_${event.id}`, message }));
     }
 }
 

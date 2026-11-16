@@ -14,6 +14,8 @@ import { EdaEvent } from "./eda-event.js";
  * Note: delivery is at-least-once with a dedupe window of only the last 1000 event ids per
  * (topic, partition, consumer group) — **handlers must be idempotent**. A throw is retried 10 times over
  * roughly 8.5 minutes, after which the event is logged and dropped; there is no dead-letter queue.
+ * Each retry runs `handle` again from the top, so any event it publishes should take its id from the
+ * incoming event's id — otherwise every attempt publishes what looks like a new event.
  *
  * @typeParam TEvent - the event type this handler processes
  *

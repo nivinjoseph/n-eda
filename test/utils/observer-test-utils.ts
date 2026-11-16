@@ -179,8 +179,11 @@ export async function createObserverEdaManager(): Promise<EdaManager>
 /**
  * Polls until `predicate` holds or the timeout elapses. Preferable to a fixed sleep: the pub/sub doorbell
  * usually delivers in milliseconds, but the consumer's fallback poll is 2.5-5s.
+ *
+ * The predicate may be asynchronous, for conditions that have to be read from Redis.
  */
-export async function waitFor(predicate: () => boolean, timeout = Duration.fromSeconds(20)): Promise<boolean>
+export async function waitFor(
+    predicate: () => boolean | Promise<boolean>, timeout = Duration.fromSeconds(20)): Promise<boolean>
 {
     given(predicate, "predicate").ensureHasValue().ensureIsFunction();
 
@@ -188,7 +191,7 @@ export async function waitFor(predicate: () => boolean, timeout = Duration.fromS
 
     while (Date.now() < deadline)
     {
-        if (predicate())
+        if (await predicate())
             return true;
 
         await Delay.milliseconds(100);
