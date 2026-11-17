@@ -19,20 +19,36 @@ export interface EventBus extends Disposable {
      */
     initialize(manager: EdaManager): void;
     /**
-     * Publishes one or more events to a topic. Events are bucketed by partition and each partition's batch
-     * is written as a single compressed Redis entry.
+     * Publishes one or more events to the topics their classes declare with `@topic`, without naming a
+     * topic at the call site. Events in one call may go to different sets of topics. The rules on
+     * {@link EventBus.publish | the form that takes a topic} apply unchanged.
+     *
+     * @param events - the events to publish; an empty list is a no-op
+     * @throws if an event's class declares no topics, in addition to everything the other form throws
+     */
+    publish(...events: ReadonlyArray<EdaEvent>): Promise<void>;
+    /**
+     * Publishes one or more events to a topic, and to every topic each event's class declares with
+     * `@topic`. Events are bucketed by partition and each partition's batch is written as a single
+     * compressed Redis entry per topic. A topic that is both passed and declared is written once.
      *
      * RULE: an event whose `name` has no handler registered on **this** manager is **silently dropped**
-     * unless the topic was configured with `.forcePublish()`. A service that only emits events it does not
-     * itself consume publishes nothing until you do that. This is the sharpest edge in the library.
+     * on any topic that was not configured with `.forcePublish()` — declared topics included. A service
+     * that only emits events it does not itself consume publishes nothing until you do that. This is the
+     * sharpest edge in the library.
+     *
+     * RULE: every target topic is validated before anything is written, but the writes are independent.
+     * One topic can be written while another fails, in which case this rejects once every topic write has
+     * finished; a retry re-sends to the topics that already succeeded. Observers are notified only after
+     * every write has succeeded, so a call that rejects notifies none of them.
      *
      * Note: `topic` must exactly match a registered `Topic.name`; the lookup is case-sensitive even though
      * duplicate-name detection is not.
      *
      * @param topic - the registered topic name to publish to
      * @param events - the events to publish; an empty list is a no-op
-     * @throws if the bus is not initialized, the topic is not registered, the topic is the distributed
-     * observer topic, an event lacks a string `id`/`name`, or the bus has been disposed
+     * @throws if the bus is not initialized, the topic or a declared topic is not registered or is the
+     * distributed observer topic, an event lacks a string `id`/`name`, or the bus has been disposed
      */
     publish(topic: string, ...events: ReadonlyArray<EdaEvent>): Promise<void>;
     /**

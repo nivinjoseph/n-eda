@@ -26,7 +26,14 @@ import { ClassDefinition, Serializable } from "@nivinjoseph/n-util";
  * ```
  */
 export interface EdaEvent extends Serializable {
-    /** Unique id for this event instance. Serialized; used as the deduplication key by consumers. */
+    /**
+     * Unique id for this event instance. Serialized; used as the deduplication key by consumers.
+     *
+     * RULE: must be deterministic — the same on every retry of the same logical event, and derived from the
+     * triggering event's id when the event is published from a handler. Consumers recognize a repeat only by
+     * this value, so an id generated afresh on each attempt (a timestamp, a new UUID per `publish` call)
+     * makes every retry a new event.
+     */
     get id(): string;
     /**
      * The event's type name, conventionally `(<Object>MyEvent).getTypeName()`. Serialized; the consumer

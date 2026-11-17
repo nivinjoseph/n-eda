@@ -1,4 +1,5 @@
 import { event } from "./event.js";
+import { topic } from "./event-topic.js";
 import { EventRegistration } from "./event-registration.js";
 import { EdaManager } from "./eda-manager.js";
 import { Topic } from "./topic.js";
@@ -16,7 +17,7 @@ import { observable, observedEvent, observer } from "./observed-event.js";
 import { discoverEventHandlers } from "./discovery/event-handler-discovery.js";
 // Polyfill for the standard-decorator metadata slot.
 //
-// n-eda's decorators (@event, @observedEvent, @observable, @observer) are TC39 stage-3 class decorators
+// n-eda's decorators (@event, @topic, @observedEvent, @observable, @observer) are TC39 stage-3 class decorators
 // that write into `context.metadata`, and EventRegistration reads it back off the class via
 // `HandlerClass[Symbol.metadata]`. Node does not define `Symbol.metadata` yet, so this line establishes it
 // at package-load time.
@@ -25,7 +26,7 @@ import { discoverEventHandlers } from "./discovery/event-handler-discovery.js";
 // only deep-imports individual modules will see undefined metadata and every handler registration will fail.
 //@ts-expect-error polyfill to use metadata object
 Symbol.metadata ??= Symbol("Symbol.metadata");
-export { event, Topic, EventRegistration, EdaManager, 
+export { event, topic, Topic, EventRegistration, EdaManager, 
 // InMemoryEventBus, InMemoryEventSubMgr,
 RedisEventBus, RedisEventSubMgr, AwsLambdaEventHandler, RpcEventHandler, RpcServer, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer, discoverEventHandlers };
 //# sourceMappingURL=index.js.map

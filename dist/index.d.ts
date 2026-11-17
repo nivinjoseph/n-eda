@@ -1,6 +1,7 @@
 import { EdaEvent } from "./eda-event.js";
 import { EdaEventHandler } from "./eda-event-handler.js";
 import { event } from "./event.js";
+import { topic } from "./event-topic.js";
 import { EventRegistration } from "./event-registration.js";
 import { EventBus, ObservableWatch } from "./event-bus.js";
 import { EventSubMgr } from "./event-sub-mgr.js";
@@ -22,5 +23,5 @@ import { observable, observedEvent, observer } from "./observed-event.js";
 import { ObserverEdaEventHandler } from "./observer-eda-event-handler.js";
 import { EdaContext } from "./eda-context.js";
 import { discoverEventHandlers } from "./discovery/event-handler-discovery.js";
-export { EdaEvent, EdaEventHandler, event, Topic, EventRegistration, EventBus, EventSubMgr, EdaManager, RedisEventBus, RedisEventSubMgr, LambdaDetails, AwsLambdaEventHandler, ApplicationScript, RpcDetails, RpcEventHandler, RpcServer, GrpcDetails, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer, ObserverEdaEventHandler, ObservableWatch, EdaContext, discoverEventHandlers };
+export { EdaEvent, EdaEventHandler, event, topic, Topic, EventRegistration, EventBus, EventSubMgr, EdaManager, RedisEventBus, RedisEventSubMgr, LambdaDetails, AwsLambdaEventHandler, ApplicationScript, RpcDetails, RpcEventHandler, RpcServer, GrpcDetails, GrpcEventHandler, GrpcServer, NedaClearTrackedKeysEvent, observedEvent, observable, observer, ObserverEdaEventHandler, ObservableWatch, EdaContext, discoverEventHandlers };
 //# sourceMappingURL=index.d.ts.map
