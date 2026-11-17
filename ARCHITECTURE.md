@@ -45,17 +45,31 @@ is a `Map` key in the producer registry and the value of the OpenTelemetry
 
 ## Publishing
 
-`RedisEventBus.publish(topic, ...events)`:
+`RedisEventBus.publish(topic, ...events)` or `publish(...events)` — the leading topic is optional:
 
-1. Guard: not disposed; `topic` is a registered topic name; `topic` is not the distributed-observer topic.
-2. Bucket the events by partition.
+1. Guard: not disposed; a passed `topic` is a registered topic name and is not the distributed-observer
+   topic.
+2. Resolve each event's targets: the passed topic, if any, plus the topics its class declares with `@topic`
+   (read from the class's decorator metadata), de-duplicated. **Every target of every event is validated
+   here, before any write**: an event with no target at all, a declared topic that is not registered, or a
+   declared topic that is the distributed-observer topic rejects the whole call.
+3. Bucket the events by topic and partition. Targets registered with `.disable()` are skipped.
    - `NedaClearTrackedKeysEvent` is special-cased and **fanned out to every partition**.
-   - An event whose `name` is not in `manager.eventMap` is **dropped**, unless the topic was
-     `.forcePublish()`ed.
-   - Otherwise `partition = mapToPartition(topic, event)`.
-3. If nothing was bucketed, **return early** — note this skips the observer fan-out below.
-4. One `Producer.produce(...)` per partition, all in parallel.
-5. Distributed-observer fan-out, if enabled (see below).
+   - An event whose `name` is not in `manager.eventMap` is **dropped** on a topic, unless that topic was
+     `.forcePublish()`ed. The rule is applied per topic, to passed and declared topics alike.
+   - Otherwise `partition = mapToPartition(topicName, event)`.
+4. Decide whether the observer fan-out below will run. An event counts toward it when it was bucketed for
+   at least one topic, or when every topic it was addressed to is `.disable()`d. If no event in the call
+   counts, nothing was bucketed either, so **return early** — note this skips the fan-out. Otherwise the
+   fan-out runs for every event in the call.
+5. One `Producer.produce(...)` per topic-partition, all in parallel. **The writes are independent**: there
+   is no transaction across topics, so one topic can be written while another fails, and `publish` then
+   rejects. It waits for every one of these writes to finish first (`Promise.allSettled`), so a rejection
+   never leaves a topic write still running, and it reports the first failure in bucket order. When a
+   write fails, the fan-out in step 6 does not run, so observers are not notified even for events that
+   reached some of their topics.
+6. Distributed-observer fan-out, if enabled (see below) — once per call, however many topics an event
+   was written to.
 
 `Producer.produce`:
 
@@ -79,7 +93,7 @@ private async _storeEvents(writeIndex: number, eventData: Buffer): Promise<void>
 ```
 
 **One write-index slot holds one entire `publish()` batch for that partition, not one event.** A single
-`publish(topic, ...10_000 events)` writes at most `numPartitions` Redis keys. This is why the consumer's
+`publish(topic, ...10_000 events)` writes at most `numPartitions` Redis keys per target topic. This is why the consumer's
 `maxRead = 50` means 50 *batches*, not 50 events.
 
 **The `INCR` and the `SETEX` are two separate round-trips**, each independently retried. A consumer can
@@ -296,7 +310,7 @@ event uses `observerId` as its partition key, so all notifications for one obser
 `DefaultProcessor` unwraps the inner event before calling `handle(observedEvent, observerId)`.
 
 Two costs worth knowing: the fan-out is `SCARD` + `SMEMBERS` **per event, sequentially awaited**, so
-publishing N events adds up to 2N serial round-trips; and the early return in step 3 of publishing means
+publishing N events adds up to 2N serial round-trips; and the early return in step 4 of publishing means
 a pure-publisher service never fans out at all. See [docs/known-issues.md](docs/known-issues.md).
 
 ## OpenTelemetry

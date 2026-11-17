@@ -3,6 +3,7 @@ import { ApplicationException, ObjectDisposedException } from "@nivinjoseph/n-ex
 import { EdaEvent } from "../eda-event.js";
 import { EdaManager } from "../eda-manager.js";
 import { EventBus, ObservableWatch } from "../event-bus.js";
+import { getEventTopics } from "../event-topic.js";
 // import * as Redis from "redis";
 import { ConfigurationManager } from "@nivinjoseph/n-config";
 import { inject } from "@nivinjoseph/n-ject";
@@ -86,141 +87,173 @@ export class RedisEventBus implements EventBus
         });
     }
 
-    public async publish(topic: string, ...events: ReadonlyArray<EdaEvent>): Promise<void>
+    /**
+     * Publishes events to the topics their classes declare with `@topic`, without naming a topic at the
+     * call site. Everything documented on the form that takes a topic applies here too; see
+     * `EventBus.publish` for the full contract.
+     *
+     * @param events - the events to publish; an empty list is a no-op
+     * @throws if an event's class declares no topics, in addition to everything the other form throws
+     */
+    public async publish(...events: ReadonlyArray<EdaEvent>): Promise<void>;
+
+    // Declared last to match `EventBus`, so type utilities keep seeing the original signature.
+    /**
+     * Publishes events to the topic passed as the first argument, plus every topic each event's class
+     * declares with `@topic`. See `EventBus.publish` for the full contract.
+     *
+     * Note: every target topic is validated before anything is written, but the writes themselves are
+     * independent — one topic can be written while another fails, in which case this rejects, once every
+     * topic write has finished, and the observer fan-out does not run.
+     *
+     * @param topic - a registered topic name to publish to, in addition to the declared ones
+     * @param events - the events to publish; an empty list is a no-op
+     * @throws `ObjectDisposedException` if the bus has been disposed
+     * @throws if the bus is not initialized, a passed or declared topic is not registered or is the
+     * distributed observer topic, or an event lacks a string `id`/`name`
+     */
+    public async publish(topic: string, ...events: ReadonlyArray<EdaEvent>): Promise<void>;
+    public async publish(...args: ReadonlyArray<string | EdaEvent>): Promise<void>
     {
+        const topic = typeof args[0] === "string" ? args[0] : null;
+        const events = (topic != null ? args.slice(1) : args) as ReadonlyArray<EdaEvent>;
+        const destination = topic != null ? `topic ${topic}` : "declared topics";
+
         if (this._isDisposed)
         {
-            await this._logger.logError(`Publishing events to topic ${topic} after event bus disposed.`);
+            await this._logger.logError(`Publishing events to ${destination} after event bus disposed.`);
             throw new ObjectDisposedException(this);
         }
 
         if (this._isDisposing)
-            await this._logger.logWarning(`Publishing events to topic ${topic} while event bus disposing.`);
+            await this._logger.logWarning(`Publishing events to ${destination} while event bus disposing.`);
 
         given(this, "this")
             .ensure(t => !!t._manager, "not initialized");
 
-        given(topic, "topic").ensureHasValue().ensureIsString()
-            .ensure(t => this._manager.topics.some(u => u.name === t),
-                "must be registered topic")
-            .ensureWhen(this._manager.distributedObserverTopic != null,
-                (t) => this._manager.distributedObserverTopic!.name !== t,
-                "must not publish directly to distributed observer topic");
+        // a caller of the topic form whose topic turns out to be unset would otherwise be told its event is null
+        if (args.length > 0 && typeof args[0] !== "string")
+            given(args[0], "topic or first event").ensureHasValue()
+                .ensure(t => typeof t === "object", "must be a topic name or an event");
+
+        const observerTopicName = this._manager.distributedObserverTopic?.name ?? null;
+
+        if (topic != null)
+            given(topic, "topic").ensureHasValue().ensureIsString()
+                .ensure(t => this._manager.topics.some(u => u.name === t),
+                    "must be registered topic")
+                .ensure(t => t !== observerTopicName,
+                    "must not publish directly to distributed observer topic");
 
         given(events, "events").ensureHasValue().ensureIsArray();
         events.forEach(event =>
             given(event, "event").ensureHasValue().ensureIsObject()
                 .ensureHasStructure({ id: "string", name: "string" }));
 
-        const pubTopic = this._manager.topics.find(t => t.name === topic)!;
-        if (!pubTopic.isDisabled) // This flow is for standard EDA
+        // Every target of every event is resolved and validated here, before anything is written, so that
+        // a bad address cannot leave some of an event's topics written and others not.
+        const eventTargets = events.map(event =>
         {
-            const partitionEvents = new Map<number, Array<EdaEvent>>();
+            const declaredTopics = getEventTopics(event);
 
-            for (const event of events)
+            given(event, "event")
+                .ensure(_ => topic != null || declaredTopics.isNotEmpty,
+                    `'${event.name}' has no topic; pass a topic to publish or decorate the event class with @topic`);
+
+            declaredTopics.forEach(declaredTopic =>
             {
+                const declaration = `'${declaredTopic}' declared on event '${event.name}'`;
+
+                given(declaredTopic, "topic")
+                    .ensure(t => this._manager.topics.some(u => u.name === t),
+                        `${declaration} must be a registered topic`)
+                    .ensure(t => t !== observerTopicName,
+                        `${declaration} must not publish directly to distributed observer topic`);
+            });
+
+            const targetNames = new Set<string>(topic != null ? [topic, ...declaredTopics] : declaredTopics);
+
+            return { event, targets: [...targetNames].map(t => this._manager.topics.find(u => u.name === t)!) };
+        });
+
+        const topicPartitionEvents = new Map<string, Map<number, Array<EdaEvent>>>();
+
+        // The observer fan-out is decided per event and then applied to the whole call: it runs when at least
+        // one event was written to a topic, or was addressed only to disabled topics. An event that an enabled
+        // topic dropped does not count, which is what keeps a pure publisher from fanning out (known issue #2).
+        let notifyObservers = false;
+
+        for (const { event, targets } of eventTargets)
+        {
+            let hasEnabledTarget = false;
+            let isWritten = false;
+
+            for (const pubTopic of targets)
+            {
+                if (pubTopic.isDisabled)
+                    continue;
+
+                hasEnabledTarget = true; // This flow is for standard EDA
+
+                const partitions = new Array<number>();
+
                 if (event.name === this._nedaClearTrackedKeysEventName)
                 {
                     for (let partition = 0; partition < pubTopic.numPartitions; partition++)
-                    {
-                        if (!partitionEvents.has(partition))
-                            partitionEvents.set(partition, new Array<EdaEvent>());
-                        partitionEvents.get(partition)!.push(event);
-                    }
-
-                    continue;
+                        partitions.push(partition);
                 }
-
-                if (!this._manager.eventMap.has(event.name) && !pubTopic.isForce)
-                    continue;
-
-                const partition = this._manager.mapToPartition(topic, event);
-                if (!partitionEvents.has(partition))
-                    partitionEvents.set(partition, new Array<EdaEvent>());
-                partitionEvents.get(partition)!.push(event);
-            }
-
-            if (partitionEvents.size === 0)
-                return;
-
-            const promises = new Array<Promise<void>>();
-            partitionEvents.forEach((events, partition) =>
-            {
-                const producerKey = this._generateKey(topic, partition);
-                promises.push(this._producers.get(producerKey)!.produce(...events));
-            });
-            await Promise.all(promises);
-        }
-
-        if (this._manager.distributedObserverTopic != null && !this._manager.distributedObserverTopic.isDisabled)
-        {
-            const partitionEvents = new Map<number, Array<EdaEvent>>();
-
-            for (const event of events)
-            {
-                // we know the event type and the observable id (ref id)
-
-                // what we want to do do is figure if any observer has subscribed to this refId and this eventType
-                // Note: in a multi-tenant system, the refId would include the orgId
-
-                const observableType = event.refType;
-                const observableId = event.refId;
-                const observableEventType = event.name;
-
-                const observableKey = this._generateObservableKey({ observableType, observableId, observableEventType });
-
-                const hasSubs = await this._checkForSubscribers(observableKey);
-                if (hasSubs)
+                else
                 {
-                    const subs = await this._fetchSubscribers(observableKey);
+                    // a declared topic gets no special treatment: same rule as a passed one
+                    if (!this._manager.eventMap.has(event.name) && !pubTopic.isForce)
+                        continue;
 
-                    if (subs.isNotEmpty)
-                    {
-                        for (const sub of subs)
-                        {
-                            const [observerTypeName, observerId] = sub.split(".");
+                    partitions.push(this._manager.mapToPartition(pubTopic.name, event));
+                }
 
-                            // TODO: do be really care about this check? this check is actually done on subscribe and wouldn't make sense here from a distributed systems standpoint considering rolling deployments
-                            // const observationKey = EventRegistration.generateObservationKey(
-                            //     observerTypeName, observableType,
-                            //     observableEventType);
-                            // if (!this._manager.observerEventMap.has(observationKey))
-                            //     continue;
+                isWritten = true;
 
+                if (!topicPartitionEvents.has(pubTopic.name))
+                    topicPartitionEvents.set(pubTopic.name, new Map<number, Array<EdaEvent>>());
+                const partitionEvents = topicPartitionEvents.get(pubTopic.name)!;
 
-                            // So for each sub
-                            // we are going to wrap this event into a DistributedObserverEvent
-                            // and send it with the partition key being the observerId
-                            // and we will send it on the distributed observer topic
-
-                            const distributedObserverEvent = new NedaDistributedObserverNotifyEvent({
-                                observerTypeName,
-                                observerId,
-                                observedEventId: event.id,
-                                observedEvent: event
-                            });
-
-                            const partition = this._manager.mapToPartition(
-                                this._manager.distributedObserverTopic.name, distributedObserverEvent);
-                            if (!partitionEvents.has(partition))
-                                partitionEvents.set(partition, new Array<EdaEvent>());
-                            partitionEvents.get(partition)!.push(distributedObserverEvent);
-                        }
-                    }
+                for (const partition of partitions)
+                {
+                    if (!partitionEvents.has(partition))
+                        partitionEvents.set(partition, new Array<EdaEvent>());
+                    partitionEvents.get(partition)!.push(event);
                 }
             }
 
-            if (partitionEvents.size === 0)
-                return;
-
-            const promises = new Array<Promise<void>>();
-            partitionEvents.forEach((events, partition) =>
-            {
-                const producerKey = this._generateKey(this._manager.distributedObserverTopic!.name, partition);
-                promises.push(this._producers.get(producerKey)!.produce(...events));
-            });
-            await Promise.all(promises);
+            if (isWritten || !hasEnabledTarget)
+                notifyObservers = true;
         }
+
+        if (topicPartitionEvents.size > 0)
+        {
+            const promises = new Array<Promise<void>>();
+            topicPartitionEvents.forEach((partitionEvents, topicName) =>
+            {
+                partitionEvents.forEach((events, partition) =>
+                {
+                    const producerKey = this._generateKey(topicName, partition);
+                    promises.push(this._producers.get(producerKey)!.produce(...events));
+                });
+            });
+
+            // Every topic write is allowed to finish before a failure is reported, so that a rejection never
+            // leaves a write from this call still running. A failed call skips the observer fan-out below.
+            const results = await Promise.allSettled(promises);
+            const failure = results.find((t): t is PromiseRejectedResult => t.status === "rejected");
+            if (failure != null)
+                throw failure.reason;
+        }
+
+        if (!notifyObservers)
+            return;
+
+        // once per call, not once per topic: an event written to several topics is still one event
+        await this._publishToObservers(events);
     }
 
     // public publishToObservers(events: ReadonlyArray<EdaEvent>): Promise<void>
@@ -335,6 +368,79 @@ export class RedisEventBus implements EventBus
         }
 
         await this._disposePromise;
+    }
+
+    private async _publishToObservers(events: ReadonlyArray<EdaEvent>): Promise<void>
+    {
+        if (this._manager.distributedObserverTopic != null && !this._manager.distributedObserverTopic.isDisabled)
+        {
+            const partitionEvents = new Map<number, Array<EdaEvent>>();
+
+            for (const event of events)
+            {
+                // we know the event type and the observable id (ref id)
+
+                // what we want to do do is figure if any observer has subscribed to this refId and this eventType
+                // Note: in a multi-tenant system, the refId would include the orgId
+
+                const observableType = event.refType;
+                const observableId = event.refId;
+                const observableEventType = event.name;
+
+                const observableKey = this._generateObservableKey({ observableType, observableId, observableEventType });
+
+                const hasSubs = await this._checkForSubscribers(observableKey);
+                if (hasSubs)
+                {
+                    const subs = await this._fetchSubscribers(observableKey);
+
+                    if (subs.isNotEmpty)
+                    {
+                        for (const sub of subs)
+                        {
+                            const [observerTypeName, observerId] = sub.split(".");
+
+                            // TODO: do be really care about this check? this check is actually done on subscribe and wouldn't make sense here from a distributed systems standpoint considering rolling deployments
+                            // const observationKey = EventRegistration.generateObservationKey(
+                            //     observerTypeName, observableType,
+                            //     observableEventType);
+                            // if (!this._manager.observerEventMap.has(observationKey))
+                            //     continue;
+
+
+                            // So for each sub
+                            // we are going to wrap this event into a DistributedObserverEvent
+                            // and send it with the partition key being the observerId
+                            // and we will send it on the distributed observer topic
+
+                            const distributedObserverEvent = new NedaDistributedObserverNotifyEvent({
+                                observerTypeName,
+                                observerId,
+                                observedEventId: event.id,
+                                observedEvent: event
+                            });
+
+                            const partition = this._manager.mapToPartition(
+                                this._manager.distributedObserverTopic.name, distributedObserverEvent);
+                            if (!partitionEvents.has(partition))
+                                partitionEvents.set(partition, new Array<EdaEvent>());
+                            partitionEvents.get(partition)!.push(distributedObserverEvent);
+                        }
+                    }
+                }
+            }
+
+            if (partitionEvents.size === 0)
+                return;
+
+            const promises = new Array<Promise<void>>();
+            partitionEvents.forEach((events, partition) =>
+            {
+                const producerKey = this._generateKey(this._manager.distributedObserverTopic!.name, partition);
+                promises.push(this._producers.get(producerKey)!.produce(...events));
+            });
+            await Promise.all(promises);
+        }
     }
 
     private _generateKey(topic: string, partition: number): string

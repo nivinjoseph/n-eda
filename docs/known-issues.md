@@ -45,12 +45,16 @@ eventRegistration = this._manager.observerEventMap.get(observationKey);
 
 **Severity: high — silent, and the failure looks like a configuration problem.**
 
-`RedisEventBus.publish` returns early when partition bucketing produced nothing:
+`RedisEventBus.publish` returns before the observer fan-out when no event in the call was written (events
+addressed only to disabled topics are the one exception, described below):
 
 ```typescript
-// redis-event-bus.ts:116-117
-if (partitionEvents.size === 0)
-    return;      // never reaches the observer fan-out block at :128
+// redis-event-bus.ts, in publish()
+if (isWritten || !hasEnabledTarget)     // decided for each event
+    notifyObservers = true;
+// ...
+if (!notifyObservers)
+    return;      // never reaches the observer fan-out call below
 ```
 
 Bucketing skips any event whose name is absent from **the publishing process's own** `eventMap`, and
@@ -58,6 +62,14 @@ Bucketing skips any event whose name is absent from **the publishing process's o
 instead. So the drop happens both cross-service (the Order service publishes `OrderShippedEvent` and has no
 handler for it, because the Customer service is the one observing) and in a single process (an observer
 handler alone never puts the event in `eventMap`).
+
+The decision is made per event and then applied to the whole call, because events in one call can be
+addressed to different topics (a passed topic plus the topics each class declares with `@topic`). An event
+counts toward the fan-out when it was **written to at least one topic**, or when **every topic it was
+addressed to is registered with `.disable()`**. An event that an enabled topic dropped does not count, even
+if its other topics are disabled. If at least one event in the call counts, the fan-out runs for every event
+in the call; if none does, it is skipped. Adding an event to a call can therefore add notifications but
+never remove them. `test/messaging.test.ts` pins this down.
 
 **Workaround:** call `.forcePublish()` on the observable's topic. `test/utils/observer-test-utils.ts` does
 exactly this, and removing it makes `test/observer.test.ts` fail with zero notifications — a reliable

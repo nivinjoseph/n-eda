@@ -18,6 +18,7 @@ your entire fleet.
 - **Redis-backed distributed log** — no broker to operate beyond Redis itself
 - **Dependency injection throughout** — every handler resolves from a per-event child DI scope (`@nivinjoseph/n-ject`)
 - **Consumer groups** — independent read offsets let multiple services consume the same topic
+- **Topic-addressed events** — an event class can declare its destination topics with `@topic`, so one `publish` reaches every service that should receive it
 - **Out-of-process consumers** — proxy event processing to AWS Lambda, HTTP RPC, or gRPC
 - **Distributed observer pattern** — subscribe to events from a *specific instance* of a remote entity
 - **Convention-based handler discovery** — `discoverEventHandlers()` replaces hand-maintained registration lists
@@ -342,10 +343,58 @@ await eventBus.publish("orders", event1, event2, event3);   // variadic
 
 The topic string must exactly match a registered `Topic.name` (case-sensitive).
 
+The topic argument is optional when the event's class declares its topics with `@topic` — see
+[Addressing events to topics](#addressing-events-to-topics).
+
 > **Events with no locally-registered handler are silently dropped at publish time.** `RedisEventBus`
 > only writes events whose `name` is in this manager's `eventMap`. A dedicated publisher service — one
 > that emits events it never consumes — publishes nothing at all until you call `.forcePublish()` on
 > the topic. This is the sharpest edge in the library.
+
+### Addressing events to topics
+
+An event class can declare where its instances go. This gives messaging semantics on top of the event
+stream: a sender addresses an event to the topics of the services that should receive it, and each
+receiving service consumes its own topic.
+
+```typescript
+@topic("billing", "shipping")
+@serialize("MyApp")
+export class OrderShippedEvent extends Serializable implements EdaEvent { /* ... */ }
+
+await eventBus.publish(new OrderShippedEvent({ ... }));            // billing + shipping
+await eventBus.publish("orders", new OrderShippedEvent({ ... }));  // orders + billing + shipping
+```
+
+`publish` writes each event to the topic passed as the first argument, if any, plus every topic its class
+declares. A topic named both ways is written once. Events in one call may go to different sets of topics.
+An event with neither a passed nor a declared topic is rejected.
+
+What to know before relying on it:
+
+- **Every publisher registers every declared topic.** `publish` throws for a declared topic that is not
+  registered on the publishing manager. Retention and partitioning come from the *publisher's* `Topic`
+  object, so register it with the same `numPartitions` and TTL as the service that consumes it. To opt a
+  service out of writing to one destination, register that topic with `.disable()`.
+- **Declared topics follow the same no-handler rule.** An event with no handler on the publishing manager
+  is dropped on any topic that is not `.forcePublish()`ed. A service that only *sends* an event needs
+  `.forcePublish()` on each destination topic.
+- **All targets are validated before anything is written, but the writes are separate.** One topic can be
+  written while another fails; `publish` then rejects, once every topic write has finished, and a retry
+  re-sends to the topics that already succeeded. Consumers suppress that repeat only while the id is still
+  in their dedupe window. Observers are not notified for a call that rejects, even though some of its
+  topics were written.
+- **A service subscribed to two of an event's topics handles it twice.** Handlers are found by event name
+  and duplicates are suppressed per topic, not across topics. Give each receiving service one of the
+  event's topics.
+- **A receiver with no handler skips the message silently.** A consumer that reads an event it has no
+  handler for marks it processed and moves on, with no log line.
+- **A subclass inherits its parent's topics** unless it declares its own, which replace the parent's.
+  `@topic` can sit on an abstract base event class.
+
+To send the same event to several services you do not need this: separate consumer groups can already
+consume one topic. Declare several topics when the receivers need their own partition counts, retention,
+or isolation.
 
 ### EventSubMgr and consumer groups
 
@@ -664,6 +713,17 @@ export function event<TEvent extends EdaEvent, This extends EdaEventHandler<TEve
 Class decorator binding a handler to an event type. Throws if applied to a non-class or to a class
 without a `handle` method. Place it above `@inject(...)`.
 
+### `topic(...topicNames)`
+
+```typescript
+export function topic(...topicNames: [string, ...Array<string>]): EventTopicDecorator
+```
+
+Class decorator for an **event** class, declaring the topics its instances are published to. Names are
+trimmed and must match registered `Topic.name`s exactly. Throws if given no names, an empty or non-string
+name, or a repeated name; and if applied to a non-class or more than once to the same class. It can sit
+above or below `@serialize("Namespace")`.
+
 ### `Topic`
 
 ```typescript
@@ -685,6 +745,7 @@ it throws `ArgumentException` otherwise.
 export interface EventBus extends Disposable
 {
     initialize(manager: EdaManager): void;
+    publish(...events: ReadonlyArray<EdaEvent>): Promise<void>;
     publish(topic: string, ...events: ReadonlyArray<EdaEvent>): Promise<void>;
     subscribeToObservables(observerType: Function, observerId: string,
         watches: ReadonlyArray<ObservableWatch>): Promise<void>;
@@ -694,6 +755,10 @@ export interface EventBus extends Disposable
 ```
 
 Registered under `"EventBus"`. `initialize` is called by `bootstrap()`; you never call it.
+
+`publish` writes each event to the passed topic, if any, plus the topics its class declares with
+`@topic`. It throws if a passed or declared topic is not registered or is the distributed observer
+topic, or if an event has no topic at all. A custom `EventBus` implementation must accept both forms.
 
 ### `ObservableWatch`
 
@@ -854,6 +919,9 @@ consumer's dedupe tracking list. Use it to force reprocessing after a deliberate
 10. **Register a `Disposable` alongside your Redis client.** n-eda does not close the client it is given.
 11. **Log or alert on retry exhaustion.** There is no dead-letter queue; the only record of a dropped
     event is a log line.
+12. **Give each receiving service exactly one of an event's `@topic` topics.** A service subscribed to
+    two of them runs its handler twice, and every publisher must register all of them with matching
+    `numPartitions` and TTL.
 
 ## Related
 

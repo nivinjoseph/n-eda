@@ -1,6 +1,7 @@
 import { EdaEvent } from "./eda-event.js";
 import { EdaEventHandler } from "./eda-event-handler.js";
 import { event } from "./event.js";
+import { topic } from "./event-topic.js";
 import { EventRegistration } from "./event-registration.js";
 import { EventBus, ObservableWatch } from "./event-bus.js";
 import { EventSubMgr } from "./event-sub-mgr.js";
@@ -27,7 +28,7 @@ import { discoverEventHandlers } from "./discovery/event-handler-discovery.js";
 
 // Polyfill for the standard-decorator metadata slot.
 //
-// n-eda's decorators (@event, @observedEvent, @observable, @observer) are TC39 stage-3 class decorators
+// n-eda's decorators (@event, @topic, @observedEvent, @observable, @observer) are TC39 stage-3 class decorators
 // that write into `context.metadata`, and EventRegistration reads it back off the class via
 // `HandlerClass[Symbol.metadata]`. Node does not define `Symbol.metadata` yet, so this line establishes it
 // at package-load time.
@@ -42,6 +43,7 @@ export
 {
     EdaEvent, EdaEventHandler,
     event,
+    topic,
     Topic, EventRegistration, EventBus, EventSubMgr, EdaManager,
 
     // InMemoryEventBus, InMemoryEventSubMgr,

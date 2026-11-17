@@ -15,8 +15,9 @@ DI keys YOU must provide: `"EdaRedisClient"` (an ioredis `Redis`), `"Logger"` (a
 - `EdaEvent` — event interface: `id`, `name`, `partitionKey`, `refId`, `refType`; extends n-util `Serializable`
 - `EdaEventHandler<TEvent>` — handler INTERFACE (`implements`, never `extends`): `handle(event)`
 - `event(EventClass)` — class decorator binding a handler to an event type
+- `topic(...topicNames)` — class decorator for an EVENT class declaring the topics its instances are published to
 - `Topic` — `new Topic(name, ttlDuration, numPartitions)`; chain `.subscribe()`, `.forcePublish()`, `.flushConsume()`, `.configurePartitionAffinity("0-49")`, `.disable()`
-- `EventBus` — publish interface: `publish(topic, ...events)`, `subscribeToObservables`, `unsubscribeFromObservables`; resolve via key `"EventBus"`
+- `EventBus` — publish interface: `publish(topic, ...events)` or `publish(...events)` (topics from `@topic`), `subscribeToObservables`, `unsubscribeFromObservables`; resolve via key `"EventBus"`
 - `EventSubMgr` — subscription interface: `consume()` (never resolves until dispose)
 - `RedisEventBus`, `RedisEventSubMgr` — the only shipped implementations; both `@inject("EdaRedisClient")`
 - `EdaContext` — scoped, `get topic()`; inject as `"EdaContext"`. Throws under lambda/rpc/grpc consumers
@@ -145,6 +146,22 @@ await eventBus.publish("user", new UserCreatedEvent({ id: "evt-1", userId: "usr-
 await edaManager.dispose();
 ```
 
+Topic-addressed event (optional — the event class declares where it goes):
+
+```typescript
+@topic("billing", "shipping")                           // names of registered topics
+@serialize("MyApp")
+export class OrderShippedEvent extends Serializable implements EdaEvent { /* as above */ }
+
+// the SENDING service registers every declared topic, forced because it has no handler for the event
+edaManager.registerTopics(
+    new Topic("billing", Duration.fromHours(1), 25).forcePublish(),
+    new Topic("shipping", Duration.fromHours(1), 25).forcePublish());
+
+await eventBus.publish(new OrderShippedEvent({ ... }));            // billing + shipping
+await eventBus.publish("orders", new OrderShippedEvent({ ... }));  // orders + billing + shipping
+```
+
 Handler discovery (replaces the hand-written list):
 
 ```typescript
@@ -183,7 +200,7 @@ await eventBus.subscribeToObservables(Customer, customerId, [
 6. **Topics are publish-only by default.** `new Topic(...)` has `publishOnly === true`. Without `.subscribe()` the service publishes correctly and silently never consumes.
 7. **`await bootstrap()`** — it is async (breaking change in 7.0.0).
 8. **Never `await beginConsumption()`** — it is the consume loop and does not resolve until `dispose()`. Awaiting it hangs startup.
-9. **Events with no locally-registered handler are silently DROPPED at publish time.** A dedicated publisher service (one that emits events it does not itself consume) writes nothing until you call `.forcePublish()` on the topic. This is the sharpest edge in the library.
+9. **Events with no locally-registered handler are silently DROPPED at publish time.** A dedicated publisher service (one that emits events it does not itself consume) writes nothing until you call `.forcePublish()` on the topic. This is the sharpest edge in the library. The rule applies per topic and equally to topics declared with `@topic` — a sender needs `.forcePublish()` on every destination topic.
 10. **An installer registering `"EdaRedisClient"` and `"Logger"` is mandatory.** `bootstrap()` throws without it. n-eda never closes the Redis client — register a `Disposable` too.
 11. **Topic TTL rounds to whole minutes.** `Duration.fromSeconds(20)` → 0 minutes → Redis `ERR invalid expire time`. Use >= 1 minute.
 12. **`numPartitions` is effectively immutable.** Partition = `murmurhash3 x86 hash32(partitionKey) % numPartitions`; changing it rehashes every key, breaks per-key ordering, and orphans events in partitions nobody reads.
@@ -192,17 +209,23 @@ await eventBus.subscribeToObservables(Customer, customerId, [
 15. **No dead-letter queue.** A failing handler is retried 10 times over ~8.5 minutes (`(5+n)*n` seconds), then the event is dropped and marked processed. A poison event stalls its partition's batch window for that duration. Handlers must be idempotent — delivery is at-least-once with only a 1000-event dedupe window per (topic, partition, group). That dedupe compares event `id`s only, so ids must be deterministic: the same on every retry, and derived from the triggering event's id when publishing from a handler (`` `shipment_${event.id}` ``, never `` `shipment_${Date.now()}` ``). An id generated afresh on each attempt makes every retry a new event.
 16. **`usePartitionKeyMapper` may be called once.** Unset, it defaults to `event.partitionKey`.
 17. **`Duration` is `@nivinjoseph/n-util`, not n-eda.** n-eda does not re-export it.
-18. **The topic string in `publish(topic, ...)` must exactly match a registered `Topic.name`** — the lookup is case-sensitive even though duplicate detection is not.
+18. **The topic string in `publish(topic, ...)` must exactly match a registered `Topic.name`** — the lookup is case-sensitive even though duplicate detection is not. The same holds for every name passed to `@topic`.
 19. **All configuration must precede `bootstrap()`.** Every `use*`/`register*`/`proxyTo*`/`actAs*` method throws `invoking method after bootstrap` afterwards.
 20. **`EdaContext.topic` throws under the AWS Lambda, RPC, and gRPC consumers** — it is only populated on the in-process Redis consume path.
 21. **`EdaManager.dispose()` disposes the container even when you supplied it.** If you passed your own `Container`, expect it to be disposed — and note that you, not n-eda, must have bootstrapped it.
 22. **Run Redis with `maxmemory-policy noeviction`.** The write-index, read-index, and tracked-keys keys carry no TTL. Evicting the write index resets it to 0 while the read index stays high, which stops consumption permanently and silently.
 23. **Partition metrics are opt-in via `enableMetrics(metricsInterval?)`.** Without the call, a consuming process emits no metrics lines. With it, the process logs one flat JSON metrics line **per topic-partition per interval** (default 1 minute) for log-pipeline dashboards — volume is `topics × partitions` per interval, billed on ingest. The optional interval must be positive and at most 2^31-1 ms (~24.8 days, Node's timer maximum). Read back via the `metricsEnabled` / `metricsInterval` getters; the log contract is specified in `docs/observability.md`.
+24. **`publish` writes to the passed topic PLUS every topic the event class declares with `@topic`.** The topic argument is optional only for decorated events; an event with neither is rejected. A topic named both ways is written once. All targets are validated before any write, but the writes are separate Redis calls — one topic can be written while another fails. `publish` then rejects, only after every topic write has finished, and observers are NOT notified, even for events that reached some of their topics.
+25. **Every service that publishes a `@topic` event must register EVERY declared topic**, with the same `numPartitions` and TTL as the consuming service — retention and partitioning come from the publisher's `Topic` object. `publish` throws for a declared topic that is not registered. Register a topic with `.disable()` to opt a service out of writing to it.
+26. **A service subscribed to two of an event's topics handles the event TWICE.** Handlers are found by event name and dedupe is per (topic, partition, group). Give each receiving service one of the event's topics.
+27. **A receiver with no handler for a message skips it silently.** The consumer marks it processed with no log line.
+28. **A subclass inherits its parent's `@topic` topics**; declaring its own REPLACES them. `@topic` may be applied once per class.
 
 ## Reference implementation
 
 - `test/utils/eda-test-utils.ts` — complete working setup: events, handlers, installer, configured `EdaManager`
 - `test/eda.test.ts` — executable spec: publishes 10,000 events and asserts per-partition ordering against real Redis
+- `test/utils/messaging-test-utils.ts` + `test/messaging.test.ts` — `@topic`: a sender and two receiving services, each owning a topic
 - `README.md` — concepts, full API reference, best practices
 - `ARCHITECTURE.md` — Redis key layout, consume loop, delivery guarantees, tuning constants
 - `docs/observability.md` — partition-metrics log contract and Datadog dashboard setup

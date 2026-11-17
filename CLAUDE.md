@@ -13,6 +13,8 @@ Redis-backed partitioned event log with DI-resolved handlers.
   **When README and code disagree, trust these files.**
 - `test/utils/observer-test-utils.ts` + `test/observer.test.ts` — the reference implementation for the
   distributed observer: the three-decorator handler, `subscribeToObservables`, and the fan-out path.
+- `test/utils/messaging-test-utils.ts` + `test/messaging.test.ts` — the reference implementation for
+  events addressed to topics with `@topic`: a sender and two receiving services, each owning a topic.
 - `README.md` — concepts and the full per-export API reference.
 - `ARCHITECTURE.md` — the runtime: Redis keys, consume loop, delivery guarantees, tuning constants.
 - `docs/known-issues.md` — split into **Open** (current behavior, documented deliberately) and **Fixed**.
@@ -20,11 +22,12 @@ Redis-backed partitioned event log with DI-resolved handlers.
 
 ## Layout
 
-- `src/` — `src/index.ts` is the barrel (27 exports + the `Symbol.metadata` polyfill).
+- `src/` — `src/index.ts` is the barrel (28 exports + the `Symbol.metadata` polyfill).
   Root-level files are the public contracts; `src/redis-implementation/` is the runtime;
   `src/discovery/` is convention-based handler discovery.
-- `test/` — `node:test` suites, one process per file. `eda.test.ts`, `observer.test.ts` and `dedupe.test.ts`
-  need a live Redis; `guards.test.ts` (bootstrap validation) does not.
+- `test/` — `node:test` suites, one process per file. `eda.test.ts`, `observer.test.ts`, `dedupe.test.ts`
+  and `messaging.test.ts` need a live Redis; `guards.test.ts` (bootstrap validation) and
+  `event-topic.test.ts` (the `@topic` decorator) do not.
 - `dist/` — published build output, **committed to git**.
 
 Fully commented-out and therefore inactive: `src/in-memory-implementation/*`,
